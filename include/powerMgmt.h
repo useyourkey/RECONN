@@ -67,7 +67,25 @@ typedef enum
     POWER_BUTTON_PRESSED,
 }PowerMgmtButtonState;
 
+typedef enum
+{
+    RESET_POWER_METER_STBY_COUNTER,
+    RESET_DMM_STBY_COUNTER,
+    RESET_GPS_STBY_COUNTER,
+    RESET_SPECTRUM_ANALYZER_STBY_COUNTER,
+    RESET_SYSTEM_SHUTDOWN_TIME
+}PowerMgmtEqptType;
+
+typedef struct
+{
+    int PowerMeterCounter;
+    int DmmCounter;
+    int GpsCounter;
+    int SpectrumAnalyzerCounter;
+    int ReconnSystemCounter;
+}PowerMgmtEqptCounters;
+
 void *reconnPwrMgmtTask(void *);
 void *reconnPwrButtonTask(void *);
-void resetPowerStandbyCounter(void);
+void resetPowerStandbyCounter(PowerMgmtEqptType);
 #endif 

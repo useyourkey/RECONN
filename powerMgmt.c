@@ -3,10 +3,12 @@
 //
 // FILE:        powerMgmt.c
 //
-// CLASSES:     
+// FUNCTIONS:   reconnPwrMgmtTask()       
+//              reconnPwrButtonTask()
+//              resetPowerStandbyCounter()
 //
 // DESCRIPTION: Main file which contains process used to manage the RECONN power
-//         
+//              This includes power conservation and monitoring power button.         
 //******************************************************************************
 //
 //                       CONFIDENTIALITY NOTICE:
@@ -65,20 +67,61 @@
 #include "gpio.h"
 
 
-static int systemStandbyTime;
+// counters to keep track of when a piece of equipment should go into power conservation 
+// mode. I.E. powered down
+static PowerMgmtEqptCounters eqptStbyCounters; 
 
+//******************************************************************************
+//******************************************************************************
+//
+// FUNCTIONS:   reconnPwrMgmtTask()       
+//
+// DESCRIPTION: This task is responsible for monitoring system resources to determine
+//              if the system should place a piece of test equipment into power conservication
+//              mode. I.E. power it down. The task also monitors the entire system 
+//              for lack of iPhone client activity. If there is no client activity i.e. no
+//              commands being sent to the reconn box, this task will gracefully shutdown
+//              the system.
+//******************************************************************************
 void *reconnPwrMgmtTask(void *argument) 
 {
-    systemStandbyTime = RECONN_POWER_DOWN_TIME;
+    int i, *aEqptCounter;
+
+    eqptStbyCounters.ReconnSystemCounter = RECONN_POWER_DOWN_TIME;
+
+    aEqptCounter = &eqptStbyCounters.PowerMeterCounter;
+
+    for(i = 0; i < RESET_SPECTRUM_ANALYZER_STBY_COUNTER; i++, aEqptCounter++)
+    {
+        *aEqptCounter = RECONN_POWER_CONSERVATION_TIME;
+    }
 
     printf("%s: **** Task Started\n", __FUNCTION__);
     while (1) 
     {
-        if(systemStandbyTime == RECONN_POWER_CONSERVATION_TIME)
+        for(i = 0; i < RESET_SPECTRUM_ANALYZER_STBY_COUNTER; i++)
         {
-            printf("%s: Going into power conservation mode\n", __FUNCTION__);
+            eqptStbyCounters.PowerMeterCounter--;
+            if((--eqptStbyCounters.PowerMeterCounter) == 0)
+            {
+                printf("%s: Power Meter is going into Conservation Mode\n", __FUNCTION__);
+            }
+            if((--eqptStbyCounters.DmmCounter) == 0)
+            {
+                printf("%s: Dmm is going into Conservation Mode\n", __FUNCTION__);
+            }
+            if((--eqptStbyCounters.GpsCounter) == 0)
+            {
+                printf("%s: GPS is going into Conservation Mode\n", __FUNCTION__);
+            }
+            if((--eqptStbyCounters.SpectrumAnalyzerCounter) == 0)
+            {
+                reconnGpioAction(GPIO_141, DISABLE);
+                printf("%s: Spectrum Analyzer is going into Conservation Mode\n", __FUNCTION__);
+            }
         }
-        else if(!systemStandbyTime)
+
+        if(!eqptStbyCounters.ReconnSystemCounter)
         {
             printf("%s: Powering Down the system\n", __FUNCTION__);
 
@@ -90,7 +133,7 @@ void *reconnPwrMgmtTask(void *argument)
             // eqpt close of FD then set GPIO156 to 0
         }
         sleep(60);
-        systemStandbyTime --;
+        eqptStbyCounters.ReconnSystemCounter --;
     }
 }
 
@@ -136,6 +179,7 @@ void *reconnPwrButtonTask(void *argument)
                 // Turn off the power LED
                 reconnGpioAction(GPIO_172, DISABLE);
                 reconnGpioAction(GPIO_156, DISABLE); // releases the 5V power latch to the board.
+                break;
             }
         }
         if(powerButtonFd)
@@ -152,7 +196,38 @@ void *reconnPwrButtonTask(void *argument)
 }
 
 
-void resetPowerStandbyCounter()
+void resetPowerStandbyCounter(PowerMgmtEqptType theEqpt)
 {
-    systemStandbyTime = RECONN_POWER_DOWN_TIME;
+    switch(theEqpt)
+    {
+        case RESET_POWER_METER_STBY_COUNTER:
+        {
+            eqptStbyCounters.PowerMeterCounter = RECONN_POWER_CONSERVATION_TIME;
+            break;
+        }
+        case RESET_DMM_STBY_COUNTER:
+        {
+            eqptStbyCounters.DmmCounter = RECONN_POWER_CONSERVATION_TIME;
+            break;
+        }
+        case RESET_GPS_STBY_COUNTER:
+        {
+            eqptStbyCounters.GpsCounter = RECONN_POWER_CONSERVATION_TIME;
+            break;
+        }
+        case RESET_SPECTRUM_ANALYZER_STBY_COUNTER:
+        {
+            eqptStbyCounters.SpectrumAnalyzerCounter = RECONN_POWER_CONSERVATION_TIME;
+            break;
+        }
+        case RESET_SYSTEM_SHUTDOWN_TIME:
+        {
+            break;
+        }
+        default:
+        {
+            printf("%s: Invalid eqpt type %d\n", __FUNCTION__, theEqpt);
+        }
+    }
+    eqptStbyCounters.ReconnSystemCounter = RECONN_POWER_DOWN_TIME;
 }

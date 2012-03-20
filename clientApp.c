@@ -211,6 +211,7 @@ void *reconnClientTask(void *args)
                         case KEEPALIVE_MESSAGE: 
                         {
                             sendReconnCommandSuccess(mySocketFd, thePacket.messageId.Byte[0], thePacket.messageId.Byte[1]);
+                            resetPowerStandbyCounter(RESET_SYSTEM_SHUTDOWN_TIME);
                             break;
                         }
                         case CLIENT_RESIGN_REQ:
@@ -226,6 +227,7 @@ void *reconnClientTask(void *args)
                                 masterClientSocketFd = -1;
                             }
                             connection_open = FALSE;
+                            resetPowerStandbyCounter(RESET_SYSTEM_SHUTDOWN_TIME);
                             break;
                         }
                         case CLIENT_ACCESS_REQ:
@@ -233,6 +235,7 @@ void *reconnClientTask(void *args)
                             printf("%s: Received CLIENT_ACCESS_REQ\n", __FUNCTION__);
                             sendReconnCommandSuccess(mySocketFd,
                                     thePacket.messageId.Byte[0], thePacket.messageId.Byte[1]);
+                            resetPowerStandbyCounter(RESET_SYSTEM_SHUTDOWN_TIME);
                             break;
                         }
                         case MASTER_MODE_REQ:
@@ -261,6 +264,8 @@ void *reconnClientTask(void *args)
                                 printf("%s %d: Sending Failure because there is already a master \n", __FUNCTION__, __LINE__);
                                 break;
                             }
+                            resetPowerStandbyCounter(RESET_SYSTEM_SHUTDOWN_TIME);
+                            break;
                         }
                         case MASTER_MODE_RESIGN_REQ:
                         {
@@ -280,6 +285,7 @@ void *reconnClientTask(void *args)
                                     sendSocket(masterClientSocketFd, (unsigned char *)&thePacket, 4, 0);
                                 }
                             }
+                            resetPowerStandbyCounter(RESET_SYSTEM_SHUTDOWN_TIME);
                             break;
                         }
                         case WIFI_STATUS_REQ:
@@ -299,11 +305,13 @@ void *reconnClientTask(void *args)
                             sendReconnCommandFailed (mySocketFd, thePacket.messageId.Byte[0],
                                     thePacket.messageId.Byte[1]);
 #endif
+                            resetPowerStandbyCounter(RESET_SYSTEM_SHUTDOWN_TIME);
                             break;
                         }
                         case WIFI_CHANGE_PASSWORD_REQ:
                         case WIFI_CHANGE_SSID_REQ:
                         {
+                            resetPowerStandbyCounter(RESET_SYSTEM_SHUTDOWN_TIME);
                             break;
                         }
                         case SPECANA_POWER_SET_REQ:
@@ -324,12 +332,13 @@ void *reconnClientTask(void *args)
                                             thePacket.messageId.Byte[0], 
                                             thePacket.messageId.Byte[1]); 
                                 }
-                                break;
                             }
+                            resetPowerStandbyCounter(RESET_SPECTRUM_ANALYZER_STBY_COUNTER);
                             break;
                         }
                         case SPECANA_IDLE_CFG_REQ:
                         {
+                            resetPowerStandbyCounter(RESET_SPECTRUM_ANALYZER_STBY_COUNTER);
                             break;
                         }
                         case SPECANA_PKT_SEND_REQ:
@@ -347,8 +356,8 @@ void *reconnClientTask(void *args)
                                 theEqptFd = pModeAndEqptDescriptors->analyzerFd;
                                 responseNeeded = TRUE;
                             }
+                            resetPowerStandbyCounter(RESET_SPECTRUM_ANALYZER_STBY_COUNTER);
                             break;
-
                         }
                         case GPS_POWER_SET_REQ:
                         {
@@ -364,10 +373,12 @@ void *reconnClientTask(void *args)
                             }
                             sendReconnCommandFailed(mySocketFd,
                                     thePacket.messageId.Byte[0], thePacket.messageId.Byte[1]);
+                            resetPowerStandbyCounter(RESET_GPS_STBY_COUNTER);
                             break;
                         }
                         case GPS_IDLE_CFG_REQ:
                         {
+                            resetPowerStandbyCounter(RESET_GPS_STBY_COUNTER);
                             break;
                         }
                         case GPS_PKT_SEND_REQ:
@@ -380,6 +391,7 @@ void *reconnClientTask(void *args)
                                             thePacket.messageId.Byte[0], thePacket.messageId.Byte[1]);
                                 }
                             }
+                            resetPowerStandbyCounter(RESET_GPS_STBY_COUNTER);
                             break;
                         }
                         case PMETER_POWER_SET_REQ:
@@ -387,6 +399,7 @@ void *reconnClientTask(void *args)
                         {
                             sendReconnCommandFailed(mySocketFd,
                                     thePacket.messageId.Byte[0], thePacket.messageId.Byte[1]);
+                            resetPowerStandbyCounter(RESET_POWER_METER_STBY_COUNTER);
                             break;
                         }
                         case PMETER_PKT_SEND_REQ:
@@ -413,6 +426,7 @@ void *reconnClientTask(void *args)
                                 theEqptFd = pModeAndEqptDescriptors->powerMeterFd;
                                 responseNeeded = TRUE;
                             }
+                            resetPowerStandbyCounter(RESET_POWER_METER_STBY_COUNTER);
                             break;
                         }
                         case DMM_POWER_SET_REQ:
@@ -429,6 +443,7 @@ void *reconnClientTask(void *args)
                             }
                             sendReconnCommandFailed (mySocketFd, thePacket.messageId.Byte[0],
                                     thePacket.messageId.Byte[1]);
+                            resetPowerStandbyCounter(RESET_DMM_STBY_COUNTER);
                             break;
                         }
                         case DMM_IDLE_CFG_REQ:
@@ -438,6 +453,7 @@ void *reconnClientTask(void *args)
 
                             sendReconnCommandSuccess (mySocketFd, thePacket.messageId.Byte[0], 
                                     thePacket.messageId.Byte[1]); 
+                            resetPowerStandbyCounter(RESET_DMM_STBY_COUNTER);
                             break;
                         }
                         case DMM_PKT_SEND_REQ:
@@ -453,14 +469,15 @@ void *reconnClientTask(void *args)
                                 theEqptFd = pModeAndEqptDescriptors->dmmFd;
                                 responseNeeded = TRUE;
                             }
+                            resetPowerStandbyCounter(RESET_DMM_STBY_COUNTER);
                             break;
-
                         }
                         default:
                         {
                             printf("%s: Invalid cmdid received %u\n", __FUNCTION__, cmdid);
                             sendReconnCommandFailed (mySocketFd, thePacket.messageId.Byte[0], 
                                     thePacket.messageId.Byte[1]); 
+                            resetPowerStandbyCounter(RESET_SYSTEM_SHUTDOWN_TIME);
                             break;
                         }
                     } // switch (cmdid)
@@ -474,7 +491,6 @@ void *reconnClientTask(void *args)
                     // get data from devices 
                 }
             }
-            resetPowerStandbyCounter();
         }
     }
     return 1;
