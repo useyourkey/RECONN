@@ -12,13 +12,12 @@ LINTFLAGS:= -Wall -Wextra -Wformat
 LIBS=-lpthread -lrt
 # All dependencies should be listed here
 # to assure they get rebuilt on change
-HEADERS=powerMeter.h spectrum.h gps.h reconn.h reconnSocket.h dmm.h clientApp.h powerMgmt.h eqptResponse.h reconnGpio.h
+HEADERS=powerMeter.h spectrum.h gps.h reconn.h socket.h dmm.h clientApp.h powerMgmt.h eqptResponse.h gpio.h
 
 H_DEPENDENCIES:=$(addprefix include/, $(HEADERS))
 
 # All object files listed here
-#OBJ=reconnApp.o gps.o powerMeter.o spectrum.o msgifc.o dmm.o
-OBJ=reconnApp.o gps.o powerMeter.o spectrum.o dmm.o clientApp.o reconnSocket.o powerMgmt.o eqptResponse.o reconnGpio.o  reconnCrashHandler.o
+OBJ=reconnApp.o gps.o powerMeter.o spectrum.o dmm.o clientApp.o socket.o powerMgmt.o eqptResponse.o gpio.o  crashHandler.o
 
 all: reconn-service
 
@@ -35,7 +34,7 @@ reconn-service: $(OBJ)
 	@cscope -bkqu -i cscope.files 
 	@ctags *c include/*.h
 	@rm -f cscope.files
-	@cp reconn-service ../rootfs/skell/usr/bin
+	@cp reconn-service ../reconn_rootfs/skell/usr/bin
 clean:
 	rm -f ./*.o
 	rm -f reconn-service
