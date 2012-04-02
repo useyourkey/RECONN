@@ -76,6 +76,7 @@
 #include "powerMgmt.h"
 #include "eqptResponse.h"
 #include "gpio.h"
+#include "debugMenu.h"
 
 #define COMM_DEBUG
 
@@ -93,6 +94,8 @@ typedef enum
     RECONN_EQPT_TASK,
     RECONN_PWR_MGMT_TASK,
     RECONN_PWR_BUTTON_TASK,
+    RECONN_BATTERY_MONITOR_TASK,
+    RECONN_DEBUG_MENU_TASK,
     RECONN_NUM_SYS_TASKS
 }RECONN_TASKS;
 static pthread_t reconnThreadIds[RECONN_MAX_NUM_CLIENTS + RECONN_NUM_SYS_TASKS];
@@ -249,6 +252,14 @@ int main(int argc, char **argv)
                     (void *)0) < 0)
         {
             printf("%s: Could not start reconnPwrMgmtTask, %d %s\n", __FUNCTION__, errno, strerror(errno));
+        }
+        else if(pthread_create(&(reconnThreadIds[RECONN_BATTERY_MONITOR_TASK]), NULL, reconnBatteryMonTask, (void *) 0 ) < 0)
+        {
+            printf("%s: Could not start reconnBatteryMonTask, %d %s\n", __FUNCTION__, errno, strerror(errno));
+        }
+        else if(pthread_create(&(reconnThreadIds[RECONN_DEBUG_MENU_TASK]), NULL, debugMenuTask, (void *) 0 ) < 0)
+        {
+            printf("%s: Could not start debugMenuTask,, %d %s\n", __FUNCTION__, errno, strerror(errno));
         }
         else
         {
