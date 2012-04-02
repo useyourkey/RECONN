@@ -110,8 +110,9 @@ ReconnErrCodes reconnGpioAction(GpioNames theGpio, GpioAction theAction)
     FILE *gpioFd;
 #endif
 
+#ifdef DEBUG_GPIO
     printf("%s: Function Entered with theGpio %s, theAction %s\n", __FUNCTION__, GpioDebugNames[theGpio], (theAction == DISABLE) ? "DISABLE" : "ENABLE");
-
+#endif
     if((theAction != ENABLE) && (theAction != DISABLE))
     {
         printf("%s: Invalid Action %d\n", __FUNCTION__, theAction);
@@ -130,22 +131,30 @@ ReconnErrCodes reconnGpioAction(GpioNames theGpio, GpioAction theAction)
         {
             gpioPathPtr = GPIOROOT"export";
 
+#ifdef DEBUG_GPIO
             printf("%s: Calling fopen(%s, w)\n", __FUNCTION__, gpioPathPtr);
+#endif
             if((gpioFd = fopen(gpioPathPtr, "w")) != NULL)
             {
                 // To kill power to the Reconn device, create the sys/class gpio for 156 and set its direction 
                 // to out. The default for "value" is 0. So when the direction is set, GPIO156 is will be 0
                 // this killing 5 and 3.3 V to the PCB.
+#ifdef DEBUG_GPIO
                 printf("%s: Calling fputs(%s, %d)\n", __FUNCTION__, "156", (int)gpioFd);
+#endif
                 fputs("156", gpioFd);
 
                 fclose(gpioFd);
 
                 gpioPathPtr = GpioTable[theGpio].gpioDirectionFileName;
+#ifdef DEBUG_GPIO
                 printf("%s: Calling fopen(%s, w+)\n", __FUNCTION__, gpioPathPtr);
+#endif
                 if((gpioFd = fopen(gpioPathPtr, "w+")) != NULL) 
                 {
+#ifdef DEBUG_GPIO
                     printf("%s: Calling fputs(%s, %d)\n", __FUNCTION__, "out", (int)gpioFd);
+#endif
                     fputs("out", gpioFd);
                     fclose(gpioFd);
                 }
@@ -164,10 +173,14 @@ ReconnErrCodes reconnGpioAction(GpioNames theGpio, GpioAction theAction)
         else
         {
             gpioPathPtr = GpioTable[theGpio].gpioValueFileName;
+#ifdef DEBUG_GPIO
             printf("%s: calling fopen(%s, \"w+\")\n", __FUNCTION__, gpioPathPtr);
+#endif
             if((gpioFd = fopen(gpioPathPtr, "w+")) != NULL)
             {
+#ifdef DEBUG_GPIO
                 printf("%s: Calling fputc(%c, %d)\n", __FUNCTION__, (theAction == ENABLE) ? '1':'0', (int)gpioFd);
+#endif
                 fputc((theAction == ENABLE) ? '1':'0', gpioFd);
                 if((theGpioValue = fgetc(gpioFd)) == EOF)
                 {
@@ -176,7 +189,9 @@ ReconnErrCodes reconnGpioAction(GpioNames theGpio, GpioAction theAction)
                 }
                 else
                 {
+#ifdef DEBUG_GPIO
                     printf("%s: fgetc() returned %d\n", __FUNCTION__, (char)theGpioValue);
+#endif
                 }
                 fclose(gpioFd);
             }
@@ -188,6 +203,8 @@ ReconnErrCodes reconnGpioAction(GpioNames theGpio, GpioAction theAction)
         }
 #endif
     }
+#ifdef DEBUG_GPIO
     printf("%s: Function returning %s \n", __FUNCTION__, (retCode == RECONN_SUCCESS) ? "SUCCESS" : "FAILURE");
+#endif
     return retCode;
 }
