@@ -163,7 +163,6 @@ void *reconnPwrButtonTask(void *argument)
             if((initialPowerUp == TRUE) && (atoi((char *)&theButtonValue) == POWER_BUTTON_PRESSED))
             {
                 usleep(RECONN_CHECK_POWER_SWITCH);
-                printf(".");
                 fclose(powerButtonFd);
                 continue;
             }
@@ -189,8 +188,96 @@ void *reconnPwrButtonTask(void *argument)
         usleep(RECONN_CHECK_POWER_SWITCH);
 #else
         printf("%s: **** Task not running due to simulation\n", __FUNCTION__);
-        sleep(20000);
+        sleep(200000);
 #endif
+    }
+    return &retCode;
+}
+
+int batteryPercentage = 100;
+int chargerAttached = FALSE;
+
+void *reconnBatteryMonTask(void *argument)
+{
+    static char retCode = '1';
+    PowerMgmtLedColors ledColor = OFF;
+    FILE *dcPowerGpioFp;
+
+#ifndef __SIMULATION__
+    if((dcPowerGpioFp = fopen(RECONN_DC_POWER_GPIO_FILENAME, "r")) == NULL)
+    {
+        printf("%s: fopen(RECONN_DC_POWER_GPIO_FILENAME,\"r\") failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+    }
+#endif
+    printf("%s: **** Task Started\n", __FUNCTION__);
+    while(1)
+    {
+        // TODO Call Fuel Gauge API to get battery charge percentage.
+
+        if(batteryPercentage < 5)
+        {
+            if(ledColor == RED)
+            {
+                // we are less than 5% battery power so we have to flash
+                // the battery status LED between Red and off at a rate
+                // of 1 second.
+                reconnGpioAction(BATTERY_LED_RED_GPIO, DISABLE);
+                ledColor = OFF;
+            }
+            else
+            {
+                reconnGpioAction(BATTERY_LED_RED_GPIO, ENABLE);
+                reconnGpioAction(BATTERY_LED_GREEN_GPIO, DISABLE);
+                ledColor = RED;
+            }
+        }
+        else if(batteryPercentage < 10)
+        {
+            if(ledColor != RED)
+            {
+                reconnGpioAction(BATTERY_LED_RED_GPIO, ENABLE);
+                reconnGpioAction(BATTERY_LED_GREEN_GPIO, DISABLE);
+                ledColor = RED;
+            }
+            else if(chargerAttached == TRUE)
+            {
+                reconnGpioAction(BATTERY_LED_RED_GPIO, DISABLE);
+                ledColor = OFF;
+            }
+        }
+        else if(batteryPercentage == 100)
+        {
+            if(ledColor != GREEN)
+            {
+                reconnGpioAction(BATTERY_LED_GREEN_GPIO, ENABLE);
+                reconnGpioAction(BATTERY_LED_RED_GPIO, DISABLE);
+                ledColor = GREEN;
+            }
+        }
+        else
+        {
+            if(ledColor != GREEN)
+            {
+                reconnGpioAction(BATTERY_LED_GREEN_GPIO, ENABLE);
+                reconnGpioAction(BATTERY_LED_RED_GPIO, DISABLE);
+                ledColor = GREEN;
+            }
+            else if(chargerAttached == TRUE)
+            {
+                reconnGpioAction(BATTERY_LED_GREEN_GPIO, DISABLE);
+                ledColor = OFF;
+            }
+        }
+        // TODO need to get GPI 137 to determine if charger is attached
+#ifndef __SIMULATION__
+        if(dcPowerGpioFp)
+            fread(&chargerAttached, 1, 1, dcPowerGpioFp);
+#endif
+        usleep((chargerAttached == TRUE) ? RECONN_BATTERY_MONITOR_SLEEP : RECONN_BATTERY_MONITOR_SLEEP/2 );
+    }
+    if(dcPowerGpioFp)
+    {
+        fclose(dcPowerGpioFp);
     }
     return &retCode;
 }
