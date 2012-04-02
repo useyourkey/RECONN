@@ -60,12 +60,23 @@
 #define RECONN_POWER_DOWN_TIME 40 // 40 minutes
 #define RECONN_POWER_CONSERVATION_TIME 20 // minutes
 #define RECONN_CHECK_POWER_SWITCH 2000 // microseconds (200 milliseconds)
+#define RECONN_BATTERY_MONITOR_SLEEP 1000000 // microseconds (1 second)
+
+#define RECONN_DC_POWER_GPIO_FILENAME "/sys/class/gpio/gpio137/value"
 
 typedef enum
 {
     POWER_BUTTON_NOT_PRESSED,
     POWER_BUTTON_PRESSED,
 }PowerMgmtButtonState;
+
+typedef enum
+{
+    OFF,
+    RED,
+    GREEN,
+    FLASHING_RED,
+}PowerMgmtLedColors;
 
 typedef enum
 {
@@ -88,4 +99,5 @@ typedef struct
 void *reconnPwrMgmtTask(void *);
 void *reconnPwrButtonTask(void *);
 void resetPowerStandbyCounter(PowerMgmtEqptType);
+void *reconnBatteryMonTask(void *argument);
 #endif 
