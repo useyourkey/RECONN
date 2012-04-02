@@ -78,6 +78,7 @@
 //#define SOCKET_MUTEX
 //#define DEBUG_CONNECT
 //#define DEBUG_CLIENT
+//#define DEBUG_GPIO
 
 
 typedef enum 
