@@ -199,6 +199,7 @@ void *reconnPwrButtonTask(void *argument)
 
 uint8_t batteryPercentage;
 int chargerAttached = FALSE;
+int chargeEnable = FALSE;
 
 void *reconnBatteryMonTask(void *argument)
 {
@@ -217,6 +218,10 @@ void *reconnBatteryMonTask(void *argument)
     if((dcPowerGpioFp = fopen(RECONN_DC_POWER_GPIO_FILENAME, "r")) == NULL)
     {
         printf("%s: fopen(RECONN_DC_POWER_GPIO_FILENAME,\"r\") failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+    }
+    else
+    {
+        fread(&chargerAttached, 1, 1, dcPowerGpioFp);
     }
 #endif
     printf("%s: **** Task Started\n", __FUNCTION__);
@@ -327,6 +332,29 @@ void *reconnBatteryMonTask(void *argument)
         if(dcPowerGpioFp)
             fread(&chargerAttached, 1, 1, dcPowerGpioFp);
 #endif
+
+        if (chargerAttached)
+        {
+            // 5% tolerance fudge
+            if ((batteryPercentage > 95) && (chargeEnable))
+            {
+                /* disable charging */
+                reconnGpioAction(CHARGE_DISABLE_GPIO, DISABLE);  // schematics call out GPIO as CHARGING_ENABLE
+                chargeEnable = FALSE;
+            }
+            else if (!chargeEnable)
+            {
+                /* enable charging */
+                reconnGpioAction(CHARGE_DISABLE_GPIO, ENABLE);  // schematics call out GPIO as CHARGING_ENABLE
+                chargeEnable = TRUE;
+            }
+        }
+        else if (chargeEnable)
+        {
+            reconnGpioAction(CHARGE_DISABLE_GPIO, ENABLE);
+            chargeEnable = FALSE;
+        }
+
         usleep((chargerAttached == TRUE) ? RECONN_BATTERY_MONITOR_SLEEP : RECONN_BATTERY_MONITOR_SLEEP/2 );
     }
 
