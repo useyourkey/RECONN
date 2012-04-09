@@ -65,7 +65,7 @@
 #include "reconn.h"
 #include "powerMgmt.h"
 #include "gpio.h"
-
+#include "fuel_gauge.h"
 
 // counters to keep track of when a piece of equipment should go into power conservation 
 // mode. I.E. powered down
@@ -86,6 +86,8 @@ static PowerMgmtEqptCounters eqptStbyCounters;
 void *reconnPwrMgmtTask(void *argument) 
 {
     int i, *aEqptCounter;
+
+    (void) argument;  // quiet compiler
 
     eqptStbyCounters.ReconnSystemCounter = RECONN_POWER_DOWN_TIME;
 
@@ -144,6 +146,8 @@ void *reconnPwrButtonTask(void *argument)
     int initialPowerUp = TRUE;
     static char retCode = '1';
 
+    (void) argument;  // quiet compiler
+
     printf("%s: **** Task Started\n", __FUNCTION__);
     while(1)
     {
@@ -194,7 +198,7 @@ void *reconnPwrButtonTask(void *argument)
     return &retCode;
 }
 
-int batteryPercentage = 100;
+uint8_t batteryPercentage;
 int chargerAttached = FALSE;
 
 void *reconnBatteryMonTask(void *argument)
@@ -202,6 +206,13 @@ void *reconnBatteryMonTask(void *argument)
     static char retCode = '1';
     PowerMgmtLedColors ledColor = OFF;
     FILE *dcPowerGpioFp;
+    fuel_gauge_status_t status;
+    fuel_gauge_handle_t fgh;
+    fuel_gauge_context_t fgh_context;
+    const char *psstatus;
+    int retry_count;
+
+    (void) argument;  // quiet compiler
 
 #ifndef __SIMULATION__
     if((dcPowerGpioFp = fopen(RECONN_DC_POWER_GPIO_FILENAME, "r")) == NULL)
@@ -210,9 +221,53 @@ void *reconnBatteryMonTask(void *argument)
     }
 #endif
     printf("%s: **** Task Started\n", __FUNCTION__);
+
+    fgh = &fgh_context;
+    status = fuel_gauge_init(&fgh);
+    if (status != FUEL_GAUGE_STATUS_SUCCESS)
+    {
+        fuel_gauge_status_string(status, &psstatus);
+        printf("%s: fuel_gauge_init() failed %d(%s)\n", __FUNCTION__, status, psstatus);
+        return &retCode;
+    }
+    status = fuel_gauge_open_dev(fgh, RECONN_FUEL_GAUGE_DEVICE_I2C_BUS);
+    if (status != FUEL_GAUGE_STATUS_SUCCESS)
+    {
+        fuel_gauge_status_string(status, &psstatus);
+        printf("%s: fuel_gauge_open() failed %d(%s)\n", __FUNCTION__, status, psstatus);
+        fuel_gauge_uninit(fgh);
+        return &retCode;
+    }
+
     while(1)
     {
-        // TODO Call Fuel Gauge API to get battery charge percentage.
+        status = fuel_gauge_get_charge_percent(fgh, &batteryPercentage);
+        if (status != FUEL_GAUGE_STATUS_SUCCESS)
+        {
+            fuel_gauge_status_string(status, &psstatus);
+            printf("%s: fuel_gauge_get_charge_percent() failed %d(%s)\n", __FUNCTION__, status, psstatus);
+            if (retry_count++ > FUEL_GAUGE_RETRY_COUNT)
+            {
+                printf("%s: FATAL ERROR! Unable to restore communicati0on with the fuel gauge, aborting!\n", __FUNCTION__);
+                break;
+            }
+
+            // let's try to reset the fuel gauge and recover
+            status = fuel_gauge_power_on_reset(fgh);
+            if (status != FUEL_GAUGE_STATUS_SUCCESS)
+            {
+                fuel_gauge_status_string(status, &psstatus);
+                printf("%s: fuel_gauge_power_on_reset() failed %d(%s)\n", __FUNCTION__, status, psstatus);
+                break;
+            }
+
+            usleep(RECONN_BATTERY_MONITOR_SLEEP);
+            continue;
+        }
+        else if (retry_count)
+        {
+            retry_count = 0;
+        }
 
         if(batteryPercentage < 5)
         {
@@ -245,7 +300,7 @@ void *reconnBatteryMonTask(void *argument)
                 ledColor = OFF;
             }
         }
-        else if(batteryPercentage == 100)
+        else if(batteryPercentage > 95)  // 5% tolerance fudge
         {
             if(ledColor != GREEN)
             {
@@ -275,6 +330,20 @@ void *reconnBatteryMonTask(void *argument)
 #endif
         usleep((chargerAttached == TRUE) ? RECONN_BATTERY_MONITOR_SLEEP : RECONN_BATTERY_MONITOR_SLEEP/2 );
     }
+
+    status = fuel_gauge_close_dev(fgh);
+    if (status != FUEL_GAUGE_STATUS_SUCCESS)
+    {
+        fuel_gauge_status_string(status, &psstatus);
+        printf("%s: fuel_gauge_close() failed %d(%s)\n", __FUNCTION__, status, psstatus);
+    }
+    status = fuel_gauge_uninit(fgh);
+    if (status != FUEL_GAUGE_STATUS_SUCCESS)
+    {
+        fuel_gauge_status_string(status, &psstatus);
+        printf("%s: fuel_gauge_unit() failed %d(%s)\n", __FUNCTION__, status, psstatus);
+    }
+
     if(dcPowerGpioFp)
     {
         fclose(dcPowerGpioFp);

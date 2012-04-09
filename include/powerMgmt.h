@@ -64,6 +64,9 @@
 
 #define RECONN_DC_POWER_GPIO_FILENAME "/sys/class/gpio/gpio137/value"
 
+#define RECONN_FUEL_GAUGE_DEVICE_I2C_BUS 3
+#define FUEL_GAUGE_RETRY_COUNT 5
+
 typedef enum
 {
     POWER_BUTTON_NOT_PRESSED,
