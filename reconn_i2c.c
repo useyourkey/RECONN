@@ -157,7 +157,7 @@ int reconn_i2c_read_reg(int fh, uint8_t reg, uint8_t *pbuf, size_t count)
     for (retry = RECONN_I2C_RETRY_COUNT; ; retry--)
     {
         ret = read(fh, pbuf, count);
-        if (ret == count)
+        if (ret == (int) count)
         {
             break;
         }
@@ -210,7 +210,7 @@ int reconn_i2c_write_reg(int fh, uint8_t reg, uint8_t *pbuf, size_t count)
     for (retry = RECONN_I2C_RETRY_COUNT; ; retry--)
     {
         ret = write(fh, p, count);
-        if (ret == count)
+        if (ret == (int) count)
         {
             ret -= sizeof(reg);
             break;

@@ -174,7 +174,7 @@ fuel_gauge_status_t fuel_gauge_status_string(const fuel_gauge_status_t status,
     }
 
     // walk through and retrieve the error string for the given code
-    for (i = 0; i < sizeof(ss) / sizeof(ss[0]); i++)
+    for (i = 0; i < (int) (sizeof(ss) / sizeof(ss[0])); i++)
     {
         if (ss[i].status == status)
         {
