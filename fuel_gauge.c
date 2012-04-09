@@ -89,12 +89,12 @@ fuel_gauge_status_t fuel_gauge_init(fuel_gauge_handle_t *ph)
     }
 
     // allocate the fuel gauge context
-    h = malloc(sizeof(fuel_gauge_handle_t));
+    h = malloc(sizeof(fuel_gauge_context_t));
     if (!h)
     {
         return FUEL_GAUGE_STATUS_NO_MEM;
     }
-    memset(h, 0, sizeof(fuel_gauge_handle_t));
+    memset(h, 0, sizeof(fuel_gauge_context_t));
 
     // initialize the fuel gauge os objects
     sem_init(&h->ctx_mutext, 0, 1);
