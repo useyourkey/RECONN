@@ -55,12 +55,12 @@
 //******************************************************************************
 #ifndef __RECONN_SOCKET_H
 #define __RECONN_SOCKET_H
+#include "reconn.h"
 
 void addSocketToList(int);
 void removeSocketFromList(int);
 void sendMasterStatusRepsonse(int, unsigned char);
 void sendSocket(int, unsigned char *, int, int);
 void sendToSocketList(unsigned char *msg_ptr, int size);
-void sendReconnCommandFailed(int socket_fd, unsigned char c1, unsigned char c2);
-void sendReconnCommandSuccess(int socket_fd, unsigned char c1, unsigned char c2);
+void sendReconnResponse(int, unsigned char, unsigned char, ReconnErrCodes);
 #endif

@@ -102,7 +102,14 @@ typedef enum
 {
     RECONN_CONNECTION_STATUS_REQ=   0x0101,
     RECONN_CONNECTION_RESPONSE =    0x01f1,
-    RECONN_BUILTINTEST_REQ =        0x0103
+    RECONN_HARDWARE_FAILURE =       0x0103,
+    RECONN_ID_REQ =                 0x0104,
+    RECONN_ID_NOTIFICATION =        0x0105,
+    RECONN_INIT_STATE_REQ =         0x0106,
+    RECONN_INIT_STATE_SET_REQ =     0x0107,
+    RECONN_SW_VERSION_REQ =         0x0108,
+    RECONN_DEVICE_DEBUGB_REQ =      0x0109,
+    RECONN_SW_VERSION_NOTIF =       0x010a
 }ReconnStatus;
 
 typedef enum
@@ -176,23 +183,31 @@ typedef enum
 
 typedef enum
 {
+    SW_UPGRADE_REQ =    0x0a00
+}SwUpgradeCommands;
+
+typedef enum
+{
     RECONN_SUCCESS = 1,
     RECONN_DENIED,
     RECONN_INVALID_PARAMETER,
     RECONN_INVALID_STATE,
-    RECONN_INVALID_MESSAGE,
+    RECONN_INVALID_MESSAGE,                 //5
     RECONN_FAILURE,
-    RECONN_PACKET_READY,
+    RECONN_UPGRADE_CLIENT_CONNECTED,
+    RECONN_UPGRADE_FILE_NOT_FOUND,
+    RECONN_UPGRADE_BAD_CHECKSUM,
+    RECONN_PACKET_READY,                    //10
     RECONN_GPS_INIT_FAILED,
     RECONN_POWER_METER_INIT_FAILED,
     RECONN_SPECTRUM_ANALYZER_INIT_FAILED,
     RECONN_OUT_OF_MEMORY,
-    RECONN_SERIAL_PORT_OPEN_FAIL, 
+    RECONN_SERIAL_PORT_OPEN_FAIL,           //15
     RECONN_GPS_PORT_NOT_INITIALIZED,
     RECONN_POWER_METER_OPEN_FAIL,
     RECONN_PM_PORT_NOT_INITIALIZED,
     RECONN_CONNECT_FAILED,
-    RECONN_SA_PORT_NOT_INITIALIZED,
+    RECONN_SA_PORT_NOT_INITIALIZED,         //20
     RECONN_DMM_PORT_NOT_INITIALIZED,
     RECONN_DMM_SERIAL_PORT_OPEN_FAIL,
     RECONN_CLIENT_SOCKET_CLOSED,
@@ -291,23 +306,16 @@ typedef struct
 
 typedef int ReconnClientIndex;
 
-extern int newSocketFd;
+extern int gNewSocketFd;
 extern int gps_enabled;
 extern int powermeter_enabled;
 extern int specana_enabled;
 extern int dmm_enabled;
 
-/*---------------------- ENUMERATIONS ----------------------------------*/
-/*-------------------- BASIC DATA TYPES --------------------------------*/
-/*---------------- STRUCTURE/UNION DATA TYPES --------------------------*/
-/*-------------------- FUNCTION PROTOTYPES -----------------------------*/
 void * msgifcGetNewInterface(void * parentifc);
 int msgifcFreeInterface(void * interface);
 int msgifcDataIn(void * interface, void * data, unsigned int datalen);
 ReconnErrCodes receive_packet_data(int socket, unsigned char *buffer, int *length);
 void reconnReturnClientIndex(short index);
-
-/*------------------------- GLOBAL DATA --------------------------------*/
-/*---------------------------- MACROS ----------------------------------*/
 
 #endif /* __RECONN_H */

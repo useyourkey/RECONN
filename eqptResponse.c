@@ -63,6 +63,7 @@
 #include <errno.h>
 
 #include "reconn.h"
+#include "socket.h"
 #include "eqptResponse.h"
 
 
@@ -108,6 +109,7 @@ ReconnErrCodes reconnDeRegisterClientApp(short theIndex)
 #ifdef SOCKET_MUTEX
         pthread_mutex_lock(&socketMutex);
 #endif
+        close(socketIdList[theIndex]);
         socketIdList[theIndex] = -1;
 #ifdef SOCKET_MUTEX
         pthread_mutex_lock(&socketMutex);
@@ -120,6 +122,27 @@ ReconnErrCodes reconnDeRegisterClientApp(short theIndex)
     }
 
     return(retCode);
+}
+
+int reconnClientsRegistered()
+{
+    int i, numClients = 0;
+#ifdef SOCKET_MUTEX
+    printf("%s: Calling pthread_mutex_lock\n", __FUNCTION__);
+    pthread_mutex_lock(&socketMutex);
+#endif
+    for(i = 0; i < RECONN_MAX_NUM_CLIENTS; i++)
+    {
+        if (socketIdList[i] != -1)
+        {
+            numClients++;
+        }
+    }
+#ifdef SOCKET_MUTEX
+    printf("%s: Calling pthread_mutex_unlock\n", __FUNCTION__);
+    pthread_mutex_unlock(&socketMutex);
+#endif
+    return (numClients);
 }
 
 ReconnErrCodes reconnEqptAddMsgToQ(const char *theMsgPtr, int theMsgSize)
@@ -147,6 +170,22 @@ ReconnErrCodes reconnEqptAddMsgToQ(const char *theMsgPtr, int theMsgSize)
 }
 
 
+
+static void reconnEqptCleanUp()
+{
+    int i;
+
+    printf("%s: ***** Called\n", __FUNCTION__);
+    for(i = 0; i < RECONN_MAX_NUM_CLIENTS; i++)
+    {
+        if(socketIdList[i] != -1)
+        {
+            close(socketIdList[i]);
+        }
+    }
+    mq_close(EqptMsgQid);
+    mq_unlink(EQPT_MSG_Q_NAME);
+}
 
 void *reconnEqptTask(void *args)
 {
@@ -251,8 +290,8 @@ void reconnGetEqptResponse(int theEqptFd, int theMsgId, int mySocketFd)
         {
             if(retCode < 0)
             {
-                sendReconnCommandFailed (mySocketFd, thePacket.messageId.Byte[0],
-                        thePacket.messageId.Byte[1]);
+                sendReconnResponse (mySocketFd, thePacket.messageId.Byte[0],
+                        thePacket.messageId.Byte[1], RECONN_INVALID_MESSAGE);
                 printf("%s: select failed %d(%s)\n",__FUNCTION__, errno, strerror(errno));
             }
         }
@@ -281,8 +320,8 @@ void reconnGetEqptResponse(int theEqptFd, int theMsgId, int mySocketFd)
                 if (fstat(theEqptFd, &FdStatus) < 0)
                 {
                     printf("%s: fstat Failed %d (%s)\n", __FUNCTION__, errno, strerror(errno));
-                    sendReconnCommandFailed (mySocketFd, thePacket.messageId.Byte[0],
-                            thePacket.messageId.Byte[1]);
+                    sendReconnResponse (mySocketFd, thePacket.messageId.Byte[0],
+                            thePacket.messageId.Byte[1], RECONN_INVALID_MESSAGE);
                 }
                 else if(S_ISCHR(FdStatus.st_mode))
                 {
@@ -296,7 +335,8 @@ void reconnGetEqptResponse(int theEqptFd, int theMsgId, int mySocketFd)
                         if(length < 0)
                         {
                             printf("%s: Read Failed %d (%s)\n", __FUNCTION__, errno, strerror(errno));
-                            sendReconnCommandFailed (mySocketFd, thePacket.messageId.Byte[0],thePacket.messageId.Byte[1]);
+                            sendReconnResponse (mySocketFd, thePacket.messageId.Byte[0],
+                                    thePacket.messageId.Byte[1], RECONN_INVALID_MESSAGE);
                             return;
                         }
 #ifdef DEBUG_EQPT

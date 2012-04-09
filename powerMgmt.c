@@ -93,7 +93,7 @@ void *reconnPwrMgmtTask(void *argument)
 
     aEqptCounter = &eqptStbyCounters.PowerMeterCounter;
 
-    for(i = 0; i < RESET_SPECTRUM_ANALYZER_STBY_COUNTER; i++, aEqptCounter++)
+    for(i = 0; i <= RESET_SPECTRUM_ANALYZER_STBY_COUNTER; i++, aEqptCounter++)
     {
         *aEqptCounter = RECONN_POWER_CONSERVATION_TIME;
     }
@@ -101,26 +101,26 @@ void *reconnPwrMgmtTask(void *argument)
     printf("%s: **** Task Started\n", __FUNCTION__);
     while (1) 
     {
-        for(i = 0; i < RESET_SPECTRUM_ANALYZER_STBY_COUNTER; i++)
+        sleep(60);
+        if((--eqptStbyCounters.PowerMeterCounter) == 0)
         {
-            eqptStbyCounters.PowerMeterCounter--;
-            if((--eqptStbyCounters.PowerMeterCounter) == 0)
-            {
-                printf("%s: Power Meter is going into Conservation Mode\n", __FUNCTION__);
-            }
-            if((--eqptStbyCounters.DmmCounter) == 0)
-            {
-                printf("%s: Dmm is going into Conservation Mode\n", __FUNCTION__);
-            }
-            if((--eqptStbyCounters.GpsCounter) == 0)
-            {
-                printf("%s: GPS is going into Conservation Mode\n", __FUNCTION__);
-            }
-            if((--eqptStbyCounters.SpectrumAnalyzerCounter) == 0)
-            {
-                reconnGpioAction(GPIO_141, DISABLE);
-                printf("%s: Spectrum Analyzer is going into Conservation Mode\n", __FUNCTION__);
-            }
+            printf("%s: Power Meter is going into Conservation Mode\n", __FUNCTION__);
+        }
+        if((--eqptStbyCounters.DmmCounter) == 0)
+        {
+            reconnGpioAction(DMM_POWER_GPIO, DISABLE);
+            printf("%s: Dmm is going into Conservation Mode\n", __FUNCTION__);
+        }
+        if((--eqptStbyCounters.GpsCounter) == 0)
+        {
+            reconnGpioAction(GPS_ANTANNAE_GPIO, DISABLE);
+            reconnGpioAction(GPS_ENABLE_GPIO, DISABLE);
+            printf("%s: GPS is going into Conservation Mode\n", __FUNCTION__);
+        }
+        if((--eqptStbyCounters.SpectrumAnalyzerCounter) == 0)
+        {
+            reconnGpioAction(POWER_18V_GPIO, DISABLE);
+            printf("%s: Spectrum Analyzer is going into Conservation Mode\n", __FUNCTION__);
         }
 
         if(!eqptStbyCounters.ReconnSystemCounter)
@@ -134,7 +134,6 @@ void *reconnPwrMgmtTask(void *argument)
             // TODO: Add code to shutdown all of the internal msg queues, power down the
             // eqpt close of FD then set GPIO156 to 0
         }
-        sleep(60);
         eqptStbyCounters.ReconnSystemCounter --;
     }
 }

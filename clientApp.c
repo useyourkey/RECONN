@@ -57,6 +57,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 #include <errno.h>
 #include <unistd.h>
 #include <sys/select.h>
@@ -74,31 +75,43 @@
 #include "powerMgmt.h"
 #include "eqptResponse.h"
 #include "gpio.h"
+#include "version.h"
+#include "upgrade.h"
 
 #define RECONNBEGIN "CFS RECONN 00.00 BEGIN"
 
 
+static void clientCleanUp()
+{
+    printf("%s: **** Called\n", __FUNCTION__);
+    return 1;
+}
+
 void *reconnClientTask(void *args) 
 {
+    static int retStatus = 1;
     int mySocketFd;
     int length = 0;
-#ifdef DEBUG_CLIENT
-    int debugIndex;
-    char *debugPtr;
-#endif
     int p_length = 0;
     int connection_open = TRUE;
     ReconnPacket thePacket; /* be sure to check overflow case     */
+    ReconnResponsePacket theResponsePkt;
+    ReconnResponsePacket *theResponsePktPtr = &theResponsePkt;
     unsigned short cmdid = 0;
-    ReconnErrCodes retCode = 0;
+    ReconnErrCodes retCode = RECONN_SUCCESS;
     short myIndex;
     int theEqptFd;
     int responseNeeded = FALSE;
     static int masterClientSocketFd = -1;
     ReconnModeAndEqptDescriptors *pModeAndEqptDescriptors;
     ReconnMasterClientMode myMode;
+#ifdef DEBUG_CLIENT
+    int debugIndex;
+    char *debugPtr;
+#endif
 
-    mySocketFd = newSocketFd;
+    atexit(clientCleanUp);
+    mySocketFd = gNewSocketFd;
 
     pModeAndEqptDescriptors = args;
     myIndex = pModeAndEqptDescriptors->clientIndex;
@@ -131,23 +144,10 @@ void *reconnClientTask(void *args)
 #ifdef DEBUG_CLIENT
             printf("%s: client with index %d waiting for command\n", __FUNCTION__, myIndex);
 #endif
-            retCode = receive_packet_data(mySocketFd, (unsigned char *)&thePacket, &length);
-#ifdef DEBUG_CLIENT
-
-            printf("%s %d: Packet received from client %d with length %d\n", __FUNCTION__, __LINE__, myIndex, length);
-            debugPtr = (char *)&thePacket;
-            for(debugIndex = 0; debugIndex < length + 4; debugIndex++)
-            {
-                printf("0x%x ", debugPtr[debugIndex]);
-            }
-            printf("\n");
-
-#endif
-            if(retCode == RECONN_CLIENT_SOCKET_CLOSED)
+            if(receive_packet_data(mySocketFd, (unsigned char *)&thePacket, &length) == RECONN_CLIENT_SOCKET_CLOSED)
             {
                 printf("%s: Socket closed by Client\n", __FUNCTION__);
                 connection_open = FALSE;
-                close(mySocketFd);
                 reconnReturnClientIndex(myIndex);
                 reconnDeRegisterClientApp(myIndex);
                 if(myMode == MASTERMODE)
@@ -160,7 +160,6 @@ void *reconnClientTask(void *args)
             {
                 printf("%s: Error reading from socket.\n", __FUNCTION__);
                 /* recover from bad client read..?..?.. */
-                close(mySocketFd);
                 reconnDeRegisterClientApp(myIndex);
                 reconnReturnClientIndex(myIndex);
                 if(myMode == MASTERMODE)
@@ -171,13 +170,12 @@ void *reconnClientTask(void *args)
             }
             else if ((thePacket.messageId.Byte[0] == 0x07) && (thePacket.messageId.Byte[1] == 0x07))
             {
-                printf("%s: disonnect 0x7 0x7 received.\n", __FUNCTION__);
+                printf("%s: disconnect 0x7 0x7 received.\n", __FUNCTION__);
                 /* exit command issued, not part of the command interface. */
                 if (masterClientSocketFd == mySocketFd) 
                 {
                     mySocketFd = 0;
                 }
-                close(mySocketFd);
                 reconnDeRegisterClientApp(myIndex);
                 reconnReturnClientIndex(myIndex);
                 if(myMode == MASTERMODE)
@@ -188,6 +186,16 @@ void *reconnClientTask(void *args)
             }
             else
             {
+#ifdef DEBUG_CLIENT
+
+                printf("%s %d: Packet received from client %d with length %d\n", __FUNCTION__, __LINE__, myIndex, length);
+                debugPtr = (char *)&thePacket;
+                for(debugIndex = 0; debugIndex < length + 4; debugIndex++)
+                {
+                    printf("0x%x ", debugPtr[debugIndex]);
+                }
+                printf("\n");
+#endif
                 /* everyone needs to know the packet length */
                 GET_DATA_LENGTH_FROM_PACKET(p_length, thePacket);
                 //printf("%s %d: p_length = %d\n", __FUNCTION__, __LINE__, p_length);
@@ -210,18 +218,17 @@ void *reconnClientTask(void *args)
                     {
                         case KEEPALIVE_MESSAGE: 
                         {
-                            sendReconnCommandSuccess(mySocketFd, thePacket.messageId.Byte[0], thePacket.messageId.Byte[1]);
+                            sendReconnResponse(mySocketFd, thePacket.messageId.Byte[0], thePacket.messageId.Byte[1], RECONN_SUCCESS);
                             resetPowerStandbyCounter(RESET_SYSTEM_SHUTDOWN_TIME);
                             break;
                         }
                         case CLIENT_RESIGN_REQ:
                         {
                             /* The client has requested to be disconnected */
-                            sendReconnCommandSuccess(mySocketFd, 
-                                    thePacket.messageId.Byte[0], thePacket.messageId.Byte[1]);
+                            sendReconnResponse(mySocketFd, 
+                                    thePacket.messageId.Byte[0], thePacket.messageId.Byte[1], RECONN_SUCCESS);
                             reconnDeRegisterClientApp(myIndex);
                             reconnReturnClientIndex(myIndex);
-                            close(mySocketFd);
                             if(myMode == MASTERMODE)
                             {
                                 masterClientSocketFd = -1;
@@ -233,34 +240,25 @@ void *reconnClientTask(void *args)
                         case CLIENT_ACCESS_REQ:
                         {
                             printf("%s: Received CLIENT_ACCESS_REQ\n", __FUNCTION__);
-                            sendReconnCommandSuccess(mySocketFd,
-                                    thePacket.messageId.Byte[0], thePacket.messageId.Byte[1]);
+                            sendReconnResponse(mySocketFd,
+                                    thePacket.messageId.Byte[0], thePacket.messageId.Byte[1], RECONN_SUCCESS);
                             resetPowerStandbyCounter(RESET_SYSTEM_SHUTDOWN_TIME);
                             break;
                         }
                         case MASTER_MODE_REQ:
                         {
                             printf("%s: Received MASTER_MODE_REQ\n", __FUNCTION__);
-                            if (masterClientSocketFd == mySocketFd) 
+                            if ((masterClientSocketFd == mySocketFd) || (masterClientSocketFd == -1))
                             {
                                 // This process is the master client
-                                sendReconnCommandSuccess(mySocketFd, 
-                                        thePacket.messageId.Byte[0], thePacket.messageId.Byte[1]);
-                                printf("%s %d: Sending Success \n", __FUNCTION__, __LINE__);
-                            }
-                            else if (masterClientSocketFd == -1)
-                            {
-                                // nobody is master.  
-                                // make this process the master client
-                                masterClientSocketFd = mySocketFd;
-                                sendReconnCommandSuccess(mySocketFd,
-                                        thePacket.messageId.Byte[0], thePacket.messageId.Byte[1]); 
+                                sendReconnResponse(mySocketFd, 
+                                        thePacket.messageId.Byte[0], thePacket.messageId.Byte[1], RECONN_SUCCESS);
                                 printf("%s %d: Sending Success \n", __FUNCTION__, __LINE__);
                             }
                             else
                             {
-                                sendReconnCommandFailed(mySocketFd,
-                                        thePacket.messageId.Byte[0], thePacket.messageId.Byte[1]); 
+                                sendReconnResponse(mySocketFd,
+                                        thePacket.messageId.Byte[0], thePacket.messageId.Byte[1], RECONN_INVALID_MESSAGE); 
                                 printf("%s %d: Sending Failure because there is already a master \n", __FUNCTION__, __LINE__);
                                 break;
                             }
@@ -272,8 +270,8 @@ void *reconnClientTask(void *args)
                             printf("%s: Received MASTER_MODE_RESIGN_REQ\n", __FUNCTION__);
                             if (masterClientSocketFd == mySocketFd)
                             {
-                                sendReconnCommandSuccess(mySocketFd,
-                                        thePacket.messageId.Byte[0], thePacket.messageId.Byte[1]);
+                                sendReconnResponse(mySocketFd,
+                                        thePacket.messageId.Byte[0], thePacket.messageId.Byte[1], RECONN_SUCCESS);
                             }
                             else
                             {
@@ -288,6 +286,22 @@ void *reconnClientTask(void *args)
                             resetPowerStandbyCounter(RESET_SYSTEM_SHUTDOWN_TIME);
                             break;
                         }
+                        case RECONN_SW_VERSION_NOTIF:
+                        {
+                            int length;
+                            char *theSwVersionString; 
+
+
+                            ADD_RSPID_TO_PACKET(GENERIC_RESPONSE, theResponsePktPtr);
+                            ADD_MSGID_TO_PACKET(RECONN_SW_VERSION_NOTIF, theResponsePktPtr);
+                            theSwVersionString = getReconnSwVersion();
+                            length = strlen(theSwVersionString);
+                            ADD_DATA_LENGTH_TO_PACKET(length, theResponsePktPtr);
+                            strcat(&(theResponsePktPtr->dataPayload[0]), theSwVersionString);
+                            sendSocket(masterClientSocketFd, (unsigned char *)theResponsePktPtr, length + 6, 0);
+                            resetPowerStandbyCounter(RESET_SYSTEM_SHUTDOWN_TIME);
+                            break;
+                        }
                         case WIFI_STATUS_REQ:
                         case WIFI_SET_POWER_REQ:
                         {
@@ -297,13 +311,13 @@ void *reconnClientTask(void *args)
                             {
                                 if( WiFiInit(pModeAndEqptDescriptors->WiFiFd) == RECONN_SUCCESS)
                                 {
-                                    sendReconnCommandSuccess(mySocketFd, thePacket.messageId.Byte[0], 
-                                            thePacket.messageId.Byte[1]);
+                                    sendReconnResponse(mySocketFd, thePacket.messageId.Byte[0], 
+                                            thePacket.messageId.Byte[1], RECONN_SUCCESS);
                                     break;
                                 }
                             }
-                            sendReconnCommandFailed (mySocketFd, thePacket.messageId.Byte[0],
-                                    thePacket.messageId.Byte[1]);
+                            sendReconnResponse (mySocketFd, thePacket.messageId.Byte[0],
+                                    thePacket.messageId.Byte[1], RECONN_INVALID_MESSAGE);
 #endif
                             resetPowerStandbyCounter(RESET_SYSTEM_SHUTDOWN_TIME);
                             break;
@@ -322,15 +336,15 @@ void *reconnClientTask(void *args)
                                 if(reconnGpioAction(GPIO_141, (thePacket.dataPayload[0] == POWER_ON) ? ENABLE : DISABLE) == RECONN_FAILURE)
                                 {                           
                                     printf("%s: reconnGpioAction(GPIO_141, ENABLE/DISABLE) failed. \n", __FUNCTION__);                          
-                                    sendReconnCommandFailed (mySocketFd, 
+                                    sendReconnResponse (mySocketFd, 
                                             thePacket.messageId.Byte[0],
-                                            thePacket.messageId.Byte[1]); 
+                                            thePacket.messageId.Byte[1], RECONN_INVALID_MESSAGE); 
                                 }
                                 else
                                 {
-                                    sendReconnCommandSuccess (mySocketFd, 
+                                    sendReconnResponse (mySocketFd, 
                                             thePacket.messageId.Byte[0], 
-                                            thePacket.messageId.Byte[1]); 
+                                            thePacket.messageId.Byte[1], RECONN_SUCCESS); 
                                 }
                             }
                             resetPowerStandbyCounter(RESET_SPECTRUM_ANALYZER_STBY_COUNTER);
@@ -364,16 +378,18 @@ void *reconnClientTask(void *args)
                             if ((thePacket.dataPayload[0] == POWER_ON) || 
                                     (thePacket.dataPayload[0] == POWER_OFF))
                             {
-                                if(gpsInit(&(pModeAndEqptDescriptors->gpsFd)) == RECONN_SUCCESS)
+                                if(gpsInit(&(pModeAndEqptDescriptors->gpsFd)) != RECONN_SUCCESS)
                                 {
-                                    sendReconnCommandFailed (mySocketFd, thePacket.messageId.Byte[0], 
-                                            thePacket.messageId.Byte[1]); 
-                                    break;
+                                    sendReconnResponse (mySocketFd, thePacket.messageId.Byte[0], 
+                                            thePacket.messageId.Byte[1], RECONN_FAILURE); 
                                 }
+                                resetPowerStandbyCounter(RESET_GPS_STBY_COUNTER);
                             }
-                            sendReconnCommandFailed(mySocketFd,
-                                    thePacket.messageId.Byte[0], thePacket.messageId.Byte[1]);
-                            resetPowerStandbyCounter(RESET_GPS_STBY_COUNTER);
+                            else
+                            {
+                                sendReconnResponse(mySocketFd, thePacket.messageId.Byte[0], 
+                                        thePacket.messageId.Byte[1], RECONN_INVALID_MESSAGE);
+                            }
                             break;
                         }
                         case GPS_IDLE_CFG_REQ:
@@ -387,8 +403,8 @@ void *reconnClientTask(void *args)
                             {
                                 if(gpsWrite((unsigned char *)&(thePacket.dataPayload), p_length) == RECONN_SUCCESS)
                                 {
-                                    sendReconnCommandSuccess(mySocketFd,
-                                            thePacket.messageId.Byte[0], thePacket.messageId.Byte[1]);
+                                    sendReconnResponse(mySocketFd, thePacket.messageId.Byte[0], 
+                                            thePacket.messageId.Byte[1], RECONN_SUCCESS);
                                 }
                             }
                             resetPowerStandbyCounter(RESET_GPS_STBY_COUNTER);
@@ -397,8 +413,9 @@ void *reconnClientTask(void *args)
                         case PMETER_POWER_SET_REQ:
                         case PMETER_IDLE_CFG_REQ:
                         {
-                            sendReconnCommandFailed(mySocketFd,
-                                    thePacket.messageId.Byte[0], thePacket.messageId.Byte[1]);
+                            sendReconnResponse(mySocketFd,
+                                    thePacket.messageId.Byte[0], thePacket.messageId.Byte[1], 
+                                    RECONN_INVALID_MESSAGE);
                             resetPowerStandbyCounter(RESET_POWER_METER_STBY_COUNTER);
                             break;
                         }
@@ -415,10 +432,10 @@ void *reconnClientTask(void *args)
                                 // then there is no power meter plugged into a USB port.
                                 if(powerMeterWrite((unsigned char *)&(thePacket.dataPayload[0]), p_length) == RECONN_PM_PORT_NOT_INITIALIZED)
                                 {
-                                    if(powerMeterInit(pModeAndEqptDescriptors->powerMeterFd) != RECONN_SUCCESS)
+                                    if(powerMeterInit((int *)(pModeAndEqptDescriptors->powerMeterFd)) != RECONN_SUCCESS)
                                     {
-                                        sendReconnCommandFailed(mySocketFd, thePacket.messageId.Byte[0], 
-                                            thePacket.messageId.Byte[1]);
+                                        sendReconnResponse(mySocketFd, thePacket.messageId.Byte[0], 
+                                            thePacket.messageId.Byte[1], RECONN_INVALID_STATE);
                                         break;
                                     }
                                 }
@@ -436,14 +453,14 @@ void *reconnClientTask(void *args)
                             {
                                 if(dmmInit(&(pModeAndEqptDescriptors->analyzerFd)) == RECONN_SUCCESS)
                                 {
-                                    sendReconnCommandSuccess(mySocketFd, thePacket.messageId.Byte[0], 
-                                            thePacket.messageId.Byte[1]);
+                                    resetPowerStandbyCounter(RESET_DMM_STBY_COUNTER);
+                                    sendReconnResponse(mySocketFd, thePacket.messageId.Byte[0], 
+                                            thePacket.messageId.Byte[1], RECONN_SUCCESS);
                                     break;
                                 }
                             }
-                            sendReconnCommandFailed (mySocketFd, thePacket.messageId.Byte[0],
-                                    thePacket.messageId.Byte[1]);
-                            resetPowerStandbyCounter(RESET_DMM_STBY_COUNTER);
+                            sendReconnResponse (mySocketFd, thePacket.messageId.Byte[0],
+                                    thePacket.messageId.Byte[1], RECONN_INVALID_MESSAGE);
                             break;
                         }
                         case DMM_IDLE_CFG_REQ:
@@ -451,8 +468,8 @@ void *reconnClientTask(void *args)
                         {
                             // communicate with the device. So, send it a status command and get the response.
 
-                            sendReconnCommandSuccess (mySocketFd, thePacket.messageId.Byte[0], 
-                                    thePacket.messageId.Byte[1]); 
+                            sendReconnResponse (mySocketFd, thePacket.messageId.Byte[0], 
+                                    thePacket.messageId.Byte[1], RECONN_SUCCESS); 
                             resetPowerStandbyCounter(RESET_DMM_STBY_COUNTER);
                             break;
                         }
@@ -463,8 +480,8 @@ void *reconnClientTask(void *args)
                             {
                                 printf("%s: Sending %c to meter\n", __FUNCTION__, thePacket.dataPayload[0]);
                                 dmmWrite((unsigned char *)&(thePacket.dataPayload), p_length);
-                                sendReconnCommandSuccess(mySocketFd,
-                                        thePacket.messageId.Byte[0], thePacket.messageId.Byte[1]);
+                                sendReconnResponse(mySocketFd,
+                                        thePacket.messageId.Byte[0], thePacket.messageId.Byte[1], RECONN_SUCCESS);
                                 printf("%s: Success Sent back to client\n", __FUNCTION__);
                                 theEqptFd = pModeAndEqptDescriptors->dmmFd;
                                 responseNeeded = TRUE;
@@ -472,11 +489,28 @@ void *reconnClientTask(void *args)
                             resetPowerStandbyCounter(RESET_DMM_STBY_COUNTER);
                             break;
                         }
+                        case SW_UPGRADE_REQ:
+                        {
+                            printf("%s: Received SW_UPGRADE_REQ:\n", __FUNCTION__);
+                            if(reconnClientsRegistered() > 1)
+                            {
+                                retCode = RECONN_UPGRADE_CLIENT_CONNECTED;
+                            }
+                            else 
+                            {
+                                retCode = extractBundle();
+                                raise(SIGTERM);
+                            }
+                            sendReconnResponse(mySocketFd, thePacket.messageId.Byte[0],
+                                    thePacket.messageId.Byte[1], retCode);
+                            // The bundle has been extracted
+                            break;
+                        }
                         default:
                         {
                             printf("%s: Invalid cmdid received %u\n", __FUNCTION__, cmdid);
-                            sendReconnCommandFailed (mySocketFd, thePacket.messageId.Byte[0], 
-                                    thePacket.messageId.Byte[1]); 
+                            sendReconnResponse (mySocketFd, thePacket.messageId.Byte[0], 
+                                    thePacket.messageId.Byte[1], RECONN_INVALID_MESSAGE); 
                             resetPowerStandbyCounter(RESET_SYSTEM_SHUTDOWN_TIME);
                             break;
                         }
@@ -493,7 +527,7 @@ void *reconnClientTask(void *args)
             }
         }
     }
-    return 1;
+    return &retStatus;
 }
 
 ReconnErrCodes receive_packet_data(int socket, unsigned char *buffer, int *length) 

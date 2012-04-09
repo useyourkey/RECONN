@@ -111,30 +111,16 @@ void sendToSocketList(unsigned char *msg_ptr, int size)
     }
 }
 
-void sendReconnCommandFailed(int socket_fd, unsigned char c1, unsigned char c2)
+void sendReconnResponse(int socket_fd, unsigned char c1, unsigned char c2, ReconnErrCodes ErrCode)
 {
     ReconnResponsePacket buff;
     ReconnResponsePacket *thePacket = &buff;
 
+    memset((char *)&buff, 0 , sizeof(ReconnResponsePacket));
     ADD_RSPID_TO_PACKET(GENERIC_RESPONSE, thePacket);
     ADD_DATA_LENGTH_TO_PACKET(1, thePacket);
     thePacket->messageId.Byte[LOW] = c1;
     thePacket->messageId.Byte[HIGH] = c2;
-    thePacket->dataPayload[0] = RECONN_INVALID_MESSAGE;
+    thePacket->dataPayload[0] = ErrCode;
     sendSocket(socket_fd, (unsigned char *)thePacket, 7, 0);
 }
-
-void sendReconnCommandSuccess(int socket_fd, unsigned char c1, unsigned char c2)
-{
-    ReconnResponsePacket buff;
-    ReconnResponsePacket *thePacket = &buff;
-
-    ADD_RSPID_TO_PACKET(GENERIC_RESPONSE, thePacket);
-    ADD_DATA_LENGTH_TO_PACKET(1, thePacket);
-
-    thePacket->messageId.Byte[LOW] = c1;
-    thePacket->messageId.Byte[HIGH] = c2;
-    thePacket->dataPayload[0] = RECONN_SUCCESS;
-    sendSocket(socket_fd, (unsigned char *)thePacket, 7, 0);
-}
-

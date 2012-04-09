@@ -62,7 +62,9 @@
 #include <unistd.h>
 #include <string.h>
 #include <sched.h>
+#include <signal.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <pthread.h>
 #include <errno.h>
 
@@ -77,11 +79,11 @@
 #include "eqptResponse.h"
 #include "gpio.h"
 #include "debugMenu.h"
+#include "upgrade.h"
 
 #define COMM_DEBUG
 
-int socket_id;
-int newSocketFd; /* bound socket fd */
+int gNewSocketFd; 
 
 int gpsEnabled = FALSE;
 int powerMeterEnabled = FALSE;
@@ -96,11 +98,34 @@ typedef enum
     RECONN_PWR_BUTTON_TASK,
     RECONN_BATTERY_MONITOR_TASK,
     RECONN_DEBUG_MENU_TASK,
+    RECONN_UPGRADE_CHECK_TASK,
     RECONN_NUM_SYS_TASKS
 }RECONN_TASKS;
 static pthread_t reconnThreadIds[RECONN_MAX_NUM_CLIENTS + RECONN_NUM_SYS_TASKS];
 static int  numberOfActiveClients = 0;
+static int in_socket_fd;
 
+
+
+static void reconnCleanUp()
+{
+    printf("%s:****** Task Called\n", __FUNCTION__);
+    printf("%s:****** closing socket\n", __FUNCTION__);
+    close(in_socket_fd);
+    exit(0);
+}
+static void *upgradeCheckTask(void *args)
+{
+    printf("%s:****** Task Started\n", __FUNCTION__);
+    sleep(20);
+
+    system("killall powerLedFlash");
+    reconnGpioAction(POWER_LED_GPIO, ENABLE);
+    printf("%s:****** Removing %s\n", __FUNCTION__, UPGRADE_INPROGRESS_FILE_NAME);
+    unlink(UPGRADE_INPROGRESS_FILE_NAME);
+    unlink(UPGRADE_BUNDLE_NAME);
+    return(0);
+}
 
 static void PeripheralInit(ReconnModeAndEqptDescriptors *modeEqptDescriptors) 
 {
@@ -192,19 +217,29 @@ extern void initReconnCrashHandlers(void);
 
 int main(int argc, char **argv) 
 {
+#if 0
     int in_socket_fd; /* Incoming socket file descriptor for socket 1068     */
+#endif
     int intport = 0;
     ReconnClientIndex index;
     socklen_t client_len;
     struct sockaddr_in server_addr, client_addr;
     ReconnModeAndEqptDescriptors modeAndEqptDescriptors;
+    struct stat statInfo;
+    struct sigaction act;
     pthread_attr_t attr;
+    int optval = 1;
 
     memset(&modeAndEqptDescriptors, 0, sizeof(ReconnModeAndEqptDescriptors));
 
 #ifndef __SIMULATION__
     initReconnCrashHandlers();
 #endif
+    memset(&act, 0, sizeof(act));
+    act.sa_flags = SA_SIGINFO;
+    act.sa_sigaction = reconnCleanUp;
+    sigaction(SIGTERM, &act, NULL);
+
 
     // TODO remove this assignent when LNB is ready.
     modeAndEqptDescriptors.lnbFd = -1;
@@ -222,9 +257,15 @@ int main(int argc, char **argv)
     /* Create the incoming (server) socket */
     if((in_socket_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) 
     {
-        printf("Server Failed to initialize the incoming socket\n");
-        exit (RECONN_FAILURE);
+        printf("%s: Server Failed to initialize the incoming socket %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+        exit (0);
     }
+
+    if(setsockopt(in_socket_fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0)
+    {
+        printf("%s: setsockopt failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+    }
+
     bzero((unsigned char *) &server_addr, sizeof(server_addr));
     /* bind the socket */
     server_addr.sin_family = AF_INET;
@@ -232,11 +273,22 @@ int main(int argc, char **argv)
     intport = RECONN_INCOMING_PORT;
     server_addr.sin_port = htons(intport);
 
+    printf("%s: binding to socket\n", __FUNCTION__);
     if (bind(in_socket_fd, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0) 
     {
-        printf("Server Failed to bind the socket\n");
-        exit (RECONN_FAILURE);
+        printf("%s: Server Failed to bind the socket %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+        exit (0);
     }
+    // If there is an upgrade in progress then start a task that will sleep for 5 minutes then run.
+    // If the task does run, then the upgraded application has not crashed and do the new image is OK.
+    if(stat(UPGRADE_INPROGRESS_FILE_NAME, &statInfo) == 0)
+    {
+        if( pthread_create(&(reconnThreadIds[RECONN_UPGRADE_CHECK_TASK]), NULL, upgradeCheckTask, (void *)0) < 0)
+        {
+            printf("%s: Could not start reconnEqptTask %d %s\n", __FUNCTION__, errno, strerror(errno));
+        }
+    }
+
     /*  Start up the command processing */
     if( pthread_create(&(reconnThreadIds[RECONN_EQPT_TASK]), NULL, reconnEqptTask, (void *)0) < 0)
     {
@@ -267,43 +319,50 @@ int main(int argc, char **argv)
             while (TRUE) 
             {
                 /* pend on the incoming socket */
-                listen(in_socket_fd, 5);
-
-                client_len = sizeof(client_addr);
-
-                /* sit here and wait for a new connection request */
-                if((newSocketFd = accept(in_socket_fd, (struct sockaddr *) &client_addr,
-                                &client_len)) < 0)
+                if(listen(in_socket_fd, 5) == 0)
                 {
-                    printf("%s: Failed to open a new Client socket %d %s.\n", __FUNCTION__, errno , strerror(errno));
-                    /* place code here to recover from bad socket accept */
-                    continue;
-                    //exit (1);
-                }
-                if (newSocketFd != 0) 
-                {
-                    index = reconnGetFreeClientIndex();
-                    modeAndEqptDescriptors.clientIndex = index;
-                    modeAndEqptDescriptors.clientMode = (index == MASTERMODE) ? MASTERMODE : CLIENTMODE;
-#ifdef DEBUG_CONNECT
-                    printf("%s: newSocketFd = %d\r\n", __FUNCTION__, newSocketFd);
-                    printf("%s: Starting reconnClient index= %u \n", __FUNCTION__, index);
-#endif
-                    if(pthread_create(&(reconnThreadIds[RECONN_NUM_SYS_TASKS + index]), NULL, reconnClientTask, 
-                                (void *)&modeAndEqptDescriptors) < 0)
+
+                    client_len = sizeof(client_addr);
+
+                    /* sit here and wait for a new connection request */
+                    if((gNewSocketFd = accept(in_socket_fd, (struct sockaddr *) &client_addr,
+                                    &client_len)) < 0)
                     {
-                        printf("%s: Could not start reconnClient, %d %s\n", __FUNCTION__, errno, strerror(errno));
+                        printf("%s: Failed to open a new Client socket %d %s.\n", __FUNCTION__, errno , strerror(errno));
+                        /* place code here to recover from bad socket accept */
                         continue;
+                        //exit (1);
+                    }
+                    if (gNewSocketFd != 0) 
+                    {
+                        index = reconnGetFreeClientIndex();
+                        modeAndEqptDescriptors.clientIndex = index;
+                        modeAndEqptDescriptors.clientMode = (index == MASTERMODE) ? MASTERMODE : CLIENTMODE;
+#ifdef DEBUG_CONNECT
+                        printf("%s: gNewSocketFd = %d\r\n", __FUNCTION__, gNewSocketFd);
+                        printf("%s: Starting reconnClient index= %u \n", __FUNCTION__, index);
+#endif
+                        if(pthread_create(&(reconnThreadIds[RECONN_NUM_SYS_TASKS + index]), NULL, reconnClientTask, 
+                                    (void *)&modeAndEqptDescriptors) < 0)
+                        {
+                            printf("%s: Could not start reconnClient, %d %s\n", __FUNCTION__, errno, strerror(errno));
+                            continue;
+                        }
+                    }
+                    else
+                    {
+                        printf("%s: gNewSocketFd =%d \n", __FUNCTION__, gNewSocketFd);
                     }
                 }
                 else
                 {
-                    printf("%s: newSocketFd =%d \n", __FUNCTION__, newSocketFd);
+                    printf("%s: listen returned  =%d(%s) \n", __FUNCTION__, errno, strerror(errno));
+                    //close(in_socket_fd);
+                    break;
                 }
             }
         }
     }
-    /* should never get here. */
     printf("%s: Exiting *******************\n",__FUNCTION__);
-    exit (RECONN_FAILURE);
+    exit (0);
 }
