@@ -74,10 +74,10 @@ static PowerMgmtEqptCounters eqptStbyCounters;
 //******************************************************************************
 //******************************************************************************
 //
-// FUNCTIONS:   reconnPwrMgmtTask()       
+// FUNCTION:reconnPwrMgmtTask()       
 //
 // DESCRIPTION: This task is responsible for monitoring system resources to determine
-//              if the system should place a piece of test equipment into power conservication
+//              if the system should place a piece of test equipment into power conservation
 //              mode. I.E. power it down. The task also monitors the entire system 
 //              for lack of iPhone client activity. If there is no client activity i.e. no
 //              commands being sent to the reconn box, this task will gracefully shutdown
@@ -138,6 +138,14 @@ void *reconnPwrMgmtTask(void *argument)
     }
 }
 
+//******************************************************************************
+//******************************************************************************
+//
+// FUNCTION:    reconnPwrButtonTask()       
+//
+// DESCRIPTION: This task monitors the power button. When pressed, this task will detect
+//              that event and power down the system sequentially.
+//******************************************************************************
 void *reconnPwrButtonTask(void *argument)
 {
     FILE *powerButtonFd;
@@ -197,9 +205,21 @@ void *reconnPwrButtonTask(void *argument)
     return &retCode;
 }
 
+
+//******************************************************************************
+//******************************************************************************
+//
+// FUNCTION:    reconnBatteryMonTask()       
+//
+// DESCRIPTION: This task is responsible for monitoring the system's battery and
+//              12V charge line. This task is responsible for changing the color
+//              and flash rate of the battery status LED. This task will also detect
+//              the presence of a valid 12V charge voltage and when appropriate
+//              enable or disable charging of the battery.
+//
+//******************************************************************************
 uint8_t batteryPercentage;
 int chargerAttached = FALSE;
-int chargeEnable = FALSE;
 
 void *reconnBatteryMonTask(void *argument)
 {
@@ -211,6 +231,7 @@ void *reconnBatteryMonTask(void *argument)
     fuel_gauge_context_t fgh_context;
     const char *psstatus;
     int retry_count;
+    int chargeEnable = FALSE;
 
     (void) argument;  // quiet compiler
 
@@ -336,16 +357,19 @@ void *reconnBatteryMonTask(void *argument)
         if (chargerAttached)
         {
             // 5% tolerance fudge
-            if ((batteryPercentage > 95) && (chargeEnable))
+            if (batteryPercentage > 95)
             {
-                /* disable charging */
-                reconnGpioAction(CHARGE_DISABLE_GPIO, DISABLE);  // schematics call out GPIO as CHARGING_ENABLE
-                chargeEnable = FALSE;
+                if(chargeEnable)
+                {
+                    /* disable charging. Enabling the GPIO shuts down charging*/
+                    reconnGpioAction(CHARGE_DISABLE_GPIO, ENABLE);
+                    chargeEnable = FALSE;
+                }
             }
             else if (!chargeEnable)
             {
-                /* enable charging */
-                reconnGpioAction(CHARGE_DISABLE_GPIO, ENABLE);  // schematics call out GPIO as CHARGING_ENABLE
+                /* enable charging. Disabling the GPIO enables charging. */
+                reconnGpioAction(CHARGE_DISABLE_GPIO, DISABLE);
                 chargeEnable = TRUE;
             }
         }
