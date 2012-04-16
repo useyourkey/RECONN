@@ -102,6 +102,7 @@ void *reconnPwrMgmtTask(void *argument)
     while (1) 
     {
         sleep(60);
+#if 0   // Currently eqpt power conservation is not part of the reconn feature set.
         if((--eqptStbyCounters.PowerMeterCounter) == 0)
         {
             printf("%s: Power Meter is going into Conservation Mode\n", __FUNCTION__);
@@ -122,17 +123,12 @@ void *reconnPwrMgmtTask(void *argument)
             reconnGpioAction(POWER_18V_GPIO, DISABLE);
             printf("%s: Spectrum Analyzer is going into Conservation Mode\n", __FUNCTION__);
         }
+#endif
 
         if(!eqptStbyCounters.ReconnSystemCounter)
         {
             printf("%s: Powering Down the system\n", __FUNCTION__);
-
-            // TODO this system call needs to be replaced with code that gracefully 
-            // shutsdown all equipment and subsystems. Including saving the subsystem
-            // states.
-
-            // TODO: Add code to shutdown all of the internal msg queues, power down the
-            // eqpt close of FD then set GPIO156 to 0
+            reconnGpioAction(POWER_5V_GPIO, DISABLE);
         }
         eqptStbyCounters.ReconnSystemCounter --;
     }
@@ -166,15 +162,16 @@ void *reconnPwrButtonTask(void *argument)
         else if((theButtonValue = fgetc(powerButtonFd)) == EOF)
         {
             printf("%s: fgetc(RECONN_POWER_BUTTON_GPIO_FILENAME) == EOF %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+            fclose(powerButtonFd);
         }
         else
         {
+            fclose(powerButtonFd);
             // Upon initial power up, if the power button is depressed we keep checking until it is no 
             // longer depressed. Then we monitor it to be pressed again at which time we turn the box off.
             if((initialPowerUp == TRUE) && (atoi((char *)&theButtonValue) == POWER_BUTTON_PRESSED))
             {
                 usleep(RECONN_CHECK_POWER_SWITCH);
-                fclose(powerButtonFd);
                 continue;
             }
             initialPowerUp = FALSE;
@@ -191,10 +188,6 @@ void *reconnPwrButtonTask(void *argument)
                 reconnGpioAction(GPIO_156, DISABLE); // releases the 5V power latch to the board.
                 break;
             }
-        }
-        if(powerButtonFd)
-        {
-            fclose(powerButtonFd);
         }
         usleep(RECONN_CHECK_POWER_SWITCH);
 #else
@@ -219,13 +212,15 @@ void *reconnPwrButtonTask(void *argument)
 //
 //******************************************************************************
 uint8_t batteryPercentage;
-int chargerAttached = FALSE;
+char chargerAttached = NOT_ATTACHED;
+char thermistorValue = TEMP_IN_RANGE;
 
 void *reconnBatteryMonTask(void *argument)
 {
     static char retCode = '1';
     PowerMgmtLedColors ledColor = OFF;
     FILE *dcPowerGpioFp;
+    FILE *dcThermistorGpioFp;
     fuel_gauge_status_t status;
     fuel_gauge_handle_t fgh;
     fuel_gauge_context_t fgh_context;
@@ -235,18 +230,9 @@ void *reconnBatteryMonTask(void *argument)
 
     (void) argument;  // quiet compiler
 
-#ifndef __SIMULATION__
-    if((dcPowerGpioFp = fopen(RECONN_DC_POWER_GPIO_FILENAME, "r")) == NULL)
-    {
-        printf("%s: fopen(RECONN_DC_POWER_GPIO_FILENAME,\"r\") failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
-    }
-    else
-    {
-        fread(&chargerAttached, 1, 1, dcPowerGpioFp);
-    }
-#endif
     printf("%s: **** Task Started\n", __FUNCTION__);
 
+#ifndef __SIMULATION__
     fgh = &fgh_context;
     status = fuel_gauge_init(&fgh);
     if (status != FUEL_GAUGE_STATUS_SUCCESS)
@@ -263,10 +249,13 @@ void *reconnBatteryMonTask(void *argument)
         fuel_gauge_uninit(fgh);
         return &retCode;
     }
+#endif
 
     while(1)
     {
+#ifndef __SIMULATION__
         status = fuel_gauge_get_charge_percent(fgh, &batteryPercentage);
+#endif
         if (status != FUEL_GAUGE_STATUS_SUCCESS)
         {
             fuel_gauge_status_string(status, &psstatus);
@@ -274,6 +263,8 @@ void *reconnBatteryMonTask(void *argument)
             if (retry_count++ > FUEL_GAUGE_RETRY_COUNT)
             {
                 printf("%s: FATAL ERROR! Unable to restore communicati0on with the fuel gauge, aborting!\n", __FUNCTION__);
+                reconnGpioAction(BATTERY_LED_RED_GPIO, ENABLE);
+                reconnGpioAction(BATTERY_LED_GREEN_GPIO, DISABLE);
                 break;
             }
 
@@ -283,6 +274,8 @@ void *reconnBatteryMonTask(void *argument)
             {
                 fuel_gauge_status_string(status, &psstatus);
                 printf("%s: fuel_gauge_power_on_reset() failed %d(%s)\n", __FUNCTION__, status, psstatus);
+                reconnGpioAction(BATTERY_LED_RED_GPIO, ENABLE);
+                reconnGpioAction(BATTERY_LED_GREEN_GPIO, DISABLE);
                 break;
             }
 
@@ -299,8 +292,7 @@ void *reconnBatteryMonTask(void *argument)
             if(ledColor == RED)
             {
                 // we are less than 5% battery power so we have to flash
-                // the battery status LED between Red and off at a rate
-                // of 1 second.
+                // the battery status LED between Red and off.
                 reconnGpioAction(BATTERY_LED_RED_GPIO, DISABLE);
                 ledColor = OFF;
             }
@@ -319,7 +311,7 @@ void *reconnBatteryMonTask(void *argument)
                 reconnGpioAction(BATTERY_LED_GREEN_GPIO, DISABLE);
                 ledColor = RED;
             }
-            else if(chargerAttached == TRUE)
+            else if(chargerAttached == ATTACHED)
             {
                 reconnGpioAction(BATTERY_LED_RED_GPIO, DISABLE);
                 ledColor = OFF;
@@ -342,19 +334,28 @@ void *reconnBatteryMonTask(void *argument)
                 reconnGpioAction(BATTERY_LED_RED_GPIO, DISABLE);
                 ledColor = GREEN;
             }
-            else if(chargerAttached == TRUE)
+            else if(chargerAttached == ATTACHED)
             {
                 reconnGpioAction(BATTERY_LED_GREEN_GPIO, DISABLE);
                 ledColor = OFF;
             }
         }
-        // TODO need to get GPI 137 to determine if charger is attached
 #ifndef __SIMULATION__
-        if(dcPowerGpioFp)
+        // TODO need to get GPIO 137 to determine if charger is attached
+        if(dcPowerGpioFp = fopen(RECONN_DC_POWER_GPIO_FILENAME, "r"))
+        {
+            // The reading of the GPIO "value" file returns ascii 0 or 1
             fread(&chargerAttached, 1, 1, dcPowerGpioFp);
+            fclose(dcPowerGpioFp);
+        }
+        else
+        {
+            printf("%s: fopen(RECONN_DC_POWER_GPIO_FILENAME, r) failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+            chargerAttached = NOT_ATTACHED;
+        }
 #endif
 
-        if (chargerAttached)
+        if (chargerAttached = ATTACHED)
         {
             // 5% tolerance fudge
             if (batteryPercentage > 95)
@@ -368,9 +369,28 @@ void *reconnBatteryMonTask(void *argument)
             }
             else if (!chargeEnable)
             {
-                /* enable charging. Disabling the GPIO enables charging. */
-                reconnGpioAction(CHARGE_DISABLE_GPIO, DISABLE);
-                chargeEnable = TRUE;
+                // Enable charging if we are within the proper temperature operating
+                // range . Read the battery thermistor to make that determination. 
+                //
+                // NOTE:Disabling the charge GPIO enables charging. 
+                if(dcThermistorGpioFp = fopen(RECONN_CHARGE_THERMISTOR_GPIO_FILENAME, "r"))
+                {
+                    // The reading of the GPIO "value" file returns ascii 0 or 1
+                    if(fread(&thermistorValue, 1, 1, dcThermistorGpioFp) == 0)
+                    {
+                        printf("%s: fread(&thermistorValue, 1, 1, dcThermistorGpioFp) failed \n", __FUNCTION__, errno, strerror(errno));
+                    }
+                    fclose(dcThermistorGpioFp);
+                }
+                else
+                {
+                    printf("%s: fopen(RECONN_CHARGE_THERMISTOR_GPIO_FILENAME, r) failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+                }
+                if(thermistorValue == TEMP_IN_RANGE)
+                {
+                    reconnGpioAction(CHARGE_DISABLE_GPIO, DISABLE);
+                    chargeEnable = TRUE;
+                }
             }
         }
         else if (chargeEnable)
@@ -379,9 +399,11 @@ void *reconnBatteryMonTask(void *argument)
             chargeEnable = FALSE;
         }
 
-        usleep((chargerAttached == TRUE) ? RECONN_BATTERY_MONITOR_SLEEP : RECONN_BATTERY_MONITOR_SLEEP/2 );
+        // If the charger is attached then we flash LEDS at a 1 second rate otherwise 1/2 second.
+        usleep((chargerAttached == ATTACHED) ? RECONN_BATTERY_MONITOR_SLEEP : RECONN_BATTERY_MONITOR_SLEEP/2 );
     }
 
+#ifndef __SIMULATION__
     status = fuel_gauge_close_dev(fgh);
     if (status != FUEL_GAUGE_STATUS_SUCCESS)
     {
@@ -394,6 +416,7 @@ void *reconnBatteryMonTask(void *argument)
         fuel_gauge_status_string(status, &psstatus);
         printf("%s: fuel_gauge_unit() failed %d(%s)\n", __FUNCTION__, status, psstatus);
     }
+#endif
 
     if(dcPowerGpioFp)
     {

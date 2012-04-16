@@ -55,6 +55,7 @@
 
 
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
@@ -84,7 +85,6 @@
 static void clientCleanUp()
 {
     printf("%s: **** Called\n", __FUNCTION__);
-    return 1;
 }
 
 void *reconnClientTask(void *args) 
@@ -98,6 +98,7 @@ void *reconnClientTask(void *args)
     ReconnResponsePacket theResponsePkt;
     ReconnResponsePacket *theResponsePktPtr = &theResponsePkt;
     unsigned short cmdid = 0;
+    unsigned short responseId = 0;
     ReconnErrCodes retCode = RECONN_SUCCESS;
     short myIndex;
     int theEqptFd;
@@ -291,6 +292,7 @@ void *reconnClientTask(void *args)
                             int length;
                             char *theSwVersionString; 
 
+                            printf("%s: Received RECONN_SW_VERSION_NOTIF\n", __FUNCTION__);
 
                             ADD_RSPID_TO_PACKET(GENERIC_RESPONSE, theResponsePktPtr);
                             ADD_MSGID_TO_PACKET(RECONN_SW_VERSION_NOTIF, theResponsePktPtr);
@@ -300,6 +302,17 @@ void *reconnClientTask(void *args)
                             strcat(&(theResponsePktPtr->dataPayload[0]), theSwVersionString);
                             sendSocket(masterClientSocketFd, (unsigned char *)theResponsePktPtr, length + 6, 0);
                             resetPowerStandbyCounter(RESET_SYSTEM_SHUTDOWN_TIME);
+                            break;
+                        }
+                        case BATTERY_LEVEL_REQ:
+                        {
+                            extern uint8_t batteryPercentage;
+
+                            printf("%s: Received BATTERY_LEVEL_REQ\n", __FUNCTION__);
+
+                            sendReconnResponse (mySocketFd, (BATTERY_LEVEL_RSP & 0x00ff),
+                                    (BATTERY_LEVEL_RSP & 0xff00) >> 8, batteryPercentage);
+
                             break;
                         }
                         case WIFI_STATUS_REQ:
@@ -366,7 +379,7 @@ void *reconnClientTask(void *args)
                                 printf("%s: Calling SpectrumAnalyzerWrite p_length = %d \n", __FUNCTION__, p_length);
 #endif
                                 SpectrumAnalyzerWrite((unsigned char *)&(thePacket.dataPayload), p_length);
-                                cmdid = SPECANA_PKT_RCVD_NOTIFICATION;
+                                responseId = SPECANA_PKT_RCVD_NOTIFICATION;
                                 theEqptFd = pModeAndEqptDescriptors->analyzerFd;
                                 responseNeeded = TRUE;
                             }
@@ -439,7 +452,7 @@ void *reconnClientTask(void *args)
                                         break;
                                     }
                                 }
-                                cmdid = PMETER_PKT_RCVD_NOTIFICATION;
+                                responseId = PMETER_PKT_RCVD_NOTIFICATION;
                                 theEqptFd = pModeAndEqptDescriptors->powerMeterFd;
                                 responseNeeded = TRUE;
                             }
@@ -483,6 +496,7 @@ void *reconnClientTask(void *args)
                                 sendReconnResponse(mySocketFd,
                                         thePacket.messageId.Byte[0], thePacket.messageId.Byte[1], RECONN_SUCCESS);
                                 printf("%s: Success Sent back to client\n", __FUNCTION__);
+                                responseId = DMM_PKT_RCVD_NOTIFICATION;
                                 theEqptFd = pModeAndEqptDescriptors->dmmFd;
                                 responseNeeded = TRUE;
                             }
@@ -521,7 +535,7 @@ void *reconnClientTask(void *args)
 #ifdef DEBUG_EQPT
                     printf("%s: Calling reconnGetEqptResponse(%d)\n", __FUNCTION__, theEqptFd);
 #endif
-                    reconnGetEqptResponse(theEqptFd, cmdid, mySocketFd);
+                    reconnGetEqptResponse(theEqptFd, responseId, mySocketFd);
                     // get data from devices 
                 }
             }

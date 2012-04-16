@@ -143,7 +143,6 @@ static void PeripheralInit(ReconnModeAndEqptDescriptors *modeEqptDescriptors)
     }
     /* end GPS Init - GPS now configured */
 
-#if 0
     if((status = SpectrumAnalyzerInit(&(modeEqptDescriptors->analyzerFd))) != RECONN_SUCCESS) 
     {
         printf("Spectrum Analyzer Init Failed\n");
@@ -154,7 +153,6 @@ static void PeripheralInit(ReconnModeAndEqptDescriptors *modeEqptDescriptors)
         printf("Spectrum Analyzer Initialized\n");
     }
 
-#endif
     /* initialize the power meter */
     if ((status = powerMeterInit(&(modeEqptDescriptors->powerMeterFd))) != RECONN_SUCCESS)
     {

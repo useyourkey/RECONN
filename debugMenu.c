@@ -16,6 +16,7 @@
 
 #include "reconn.h"
 #include "debugMenu.h"
+#include "powerMgmt.h"
 
 static int mySocketFd;
 
@@ -196,12 +197,12 @@ void *debugMenuTask(void *argument)
                                 }
                                 case 10:
                                 {
-                                    chargerAttached = TRUE;
+                                    chargerAttached = ATTACHED;
                                     break;
                                 }
                                 case 11:
                                 {
-                                    chargerAttached = FALSE;
+                                    chargerAttached = NOT_ATTACHED;
                                     break;
                                 }
                                 case 12:

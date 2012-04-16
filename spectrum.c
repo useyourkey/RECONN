@@ -169,17 +169,15 @@ ReconnErrCodes SpectrumAnalyzerInit(int *fileDescriptor)
 
     // Apply power to the analyzer.
     *fileDescriptor = -1;
-#if 0
     if(reconnGpioAction(GPIO_141, ENABLE) == RECONN_FAILURE)
     {
         printf("%s: reconnGpioAction(GPIO_141, ENABLE) failed. \n", __FUNCTION__);
         retcode = RECONN_FAILURE;
     }
     else 
-#endif
     {
-        // Power has been applied, wait for the analyzer to come up before attempting to opening it.
-        sleep(3); 
+        // Power has been applied, wait for the usb drivers to come up before attempting to opening it.
+        sleep(5); 
         if((ret_status = SpectrumAnalyzerOpen(fileDescriptor)) == RECONN_SUCCESS)
         {
             SAPortInit = TRUE;
