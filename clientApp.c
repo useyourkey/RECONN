@@ -249,11 +249,21 @@ void *reconnClientTask(void *args)
                         case MASTER_MODE_REQ:
                         {
                             printf("%s: Received MASTER_MODE_REQ\n", __FUNCTION__);
-                            if ((masterClientSocketFd == mySocketFd) || (masterClientSocketFd == -1))
+                            if (masterClientSocketFd == mySocketFd)
                             {
                                 // This process is the master client
                                 sendReconnResponse(mySocketFd, 
-                                        thePacket.messageId.Byte[0], thePacket.messageId.Byte[1], RECONN_SUCCESS);
+                                        thePacket.messageId.Byte[0], 
+                                        thePacket.messageId.Byte[1], RECONN_SUCCESS);
+                                printf("%s %d: Sending Success \n", __FUNCTION__, __LINE__);
+                            }
+                            else if (masterClientSocketFd == -1)
+                            {
+                                masterClientSocketFd = mySocketFd;
+                                // This process is the master client
+                                sendReconnResponse(mySocketFd, 
+                                        thePacket.messageId.Byte[0],
+                                        thePacket.messageId.Byte[1], RECONN_SUCCESS);
                                 printf("%s %d: Sending Success \n", __FUNCTION__, __LINE__);
                             }
                             else
