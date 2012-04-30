@@ -91,27 +91,7 @@ void sendSocket(int socket_fd, unsigned char * buffer_s, int length, int num)
         printf("%s: send failed to send %d bytes\n", __FUNCTION__, length);
     }
 }
-
-void sendToSocketList(unsigned char *msg_ptr, int size)
-{
-    int counter = 0;
-    if (numberOfOpenSocket > 0)
-    {
-
-        for (counter = 0; counter < numberOfOpenSocket; counter++)
-        {
-#ifdef SOCKET_MUTEX
-            pthread_mutex_lock(&socketMutex);
-#endif
-            sendSocket(socketIdList[counter], msg_ptr, size, 0);
-#ifdef SOCKET_MUTEX
-            pthread_mutex_unlock(&socketMutex);
-#endif
-        }
-    }
-}
-
-void sendReconnResponse(int socket_fd, unsigned char c1, unsigned char c2, ReconnErrCodes ErrCode)
+void sendReconnResponse(int socket_fd, unsigned char c1, unsigned char c2, ReconnErrCodes ErrCode, ReconnMasterClientMode mode)
 {
     ReconnResponsePacket buff;
     ReconnResponsePacket *thePacket = &buff;
@@ -121,6 +101,22 @@ void sendReconnResponse(int socket_fd, unsigned char c1, unsigned char c2, Recon
     ADD_DATA_LENGTH_TO_PACKET(1, thePacket);
     thePacket->messageId.Byte[LOW] = c1;
     thePacket->messageId.Byte[HIGH] = c2;
-    thePacket->dataPayload[0] = ErrCode;
-    sendSocket(socket_fd, (unsigned char *)thePacket, 7, 0);
+    if(ErrCode == RECONN_ERROR_UNKNOWN)
+    {
+         ADD_DATA_LENGTH_TO_PACKET(0, thePacket);
+    }
+    else
+    {
+        ADD_DATA_LENGTH_TO_PACKET(1, thePacket); 
+        thePacket->dataPayload[0] = ErrCode;
+    }
+    if(mode == INSERTEDMASTERMODE)
+    {
+        // Send response out the 30 pin USB 
+        libiphoned_tx((unsigned char *)thePacket, 7);
+    }
+    else
+    {
+        sendSocket(socket_fd, (unsigned char *)thePacket, 7, 0);
+    }
 }

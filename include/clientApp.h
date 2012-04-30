@@ -57,9 +57,22 @@
 #ifndef __CLIENTAPP_H
 #define __CLIENTAPP_H
 
+#define MASTER_CLIENT_MSG_Q_NAME    "/mstRspQ"  // Wifi Connected master iPhone
+#define INSERTED_MASTER_MSG_Q_NAME  "/InsMstQ"  // Front panel inserted iPhone
+#define RECONNBEGIN "CFS RECONN 00.00 BEGIN"
+
+typedef enum
+{
+    MASTER_INSERTED,    // master client has been inserted into front panel
+    MASTER_EXTRACTED,   // Instered master client has been removed from front panel
+    MASTER_ACK          // WiFi master client acknowledment message
+}InsertedClientMessage;
+
 void * reconnClientTask(void *);
 ReconnErrCodes receive_packet_data(int, unsigned char *, int *);
 ReconnErrCodes formatReconnPacket(int, char *, int, ReconnPacket *);
-void reconnGetEqptResponse(int , int , int);
+void reconnGetEqptResponse(int , int , int, ReconnMasterClientMode);
+
+extern void registerDebugCommand();
 
 #endif

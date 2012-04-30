@@ -1,21 +1,19 @@
 //******************************************************************************
 //******************************************************************************
 //
-// FILE:        debugMenu.h
+// FILE:        libiphoned.h
 //
-// CLASSES:     
+// DESCRIPTION: header file for libiphoned.c to access library API
 //
-// DESCRIPTION: Header file for the Reconn debug menu Application
-//         
 //******************************************************************************
 //
 //                       CONFIDENTIALITY NOTICE:
 //
-// THIS FILE CONTAINS MATERIAL THAT IS "HARRIS PROPRIETARY INFORMATION"  ANY 
-// REVIEW, RELIANCE, DISTRIBUTION, DISCLOSURE, OR FORWARDING WITHOUT EXPRESSED 
-// PERMISSION IS STRICTLY PROHIBITED.  PLEASE BE SURE TO PROPERLY DISPOSE ANY 
+// THIS FILE CONTAINS MATERIAL THAT IS "HARRIS PROPRIETARY INFORMATION"  ANY
+// REVIEW, RELIANCE, DISTRIBUTION, DISCLOSURE, OR FORWARDING WITHOUT EXPRESSED
+// PERMISSION IS STRICTLY PROHIBITED.  PLEASE BE SURE TO PROPERLY DISPOSE ANY
 // HARDCOPIES OF THIS DOCUMENT.
-//         
+//
 //******************************************************************************
 //
 // Government Use Rights:
@@ -50,40 +48,17 @@
 // $Header:$
 // $Revision: 1.3 $
 // $Log:$
-// 
+//
 //******************************************************************************
 //******************************************************************************
-#ifndef __DEBUG_H
-#define __DEBUG_H
+#ifndef LIBIPHONED_H_
+#define LIBIPHONED_H_
 
-#define DEBUG_PASSWORD "Reconn2012\r\n"
-#define DEBUG_QUESTION "Enter debug password "
-#define DEBUG_INPUT_LEN  50
-#define DEBUG_OUTPUT_LEN  100
-#define DEBUG_PROMPT_MAX_SIZE 30
-#define DEBUG_PROMPT "reconn debug >"
-#define DEBUG_TIMEOUT_MESSAGE "\r\n*******You are being disconnected due to inactivity timeout\r\n"
-
-typedef struct
-{
-    char *subSystemName;
-    char *subSystemHelp;
-    char *commandName;
-    char *commandHelp;
-    int (*func)(int);
-}debugMenuStruct;
-struct TableEntry_t
-{
-    struct TableEntry_t *nextTableEntry;
-    debugMenuStruct *theMenu;
-    int numMenuItems;
-};
-
-typedef struct
-{
-    struct TableEntry_t *aMenuEntry;
-    int numTables;
-}debugMenusTableStruct_t;
-
-void *debugMenuTask(void *argument);
-#endif
+int libiphoned_isiphonepresent(void);
+int libiphoned_start(void);
+int libiphoned_stop(void);
+int libiphoned_tx(unsigned char *buf, unsigned int len);
+int libiphoned_register_rx_callback(void(*callbackfn)(unsigned char *, int), int max_buffer);
+int libiphoned_register_presence_change_callback(void(*callbackfn)(void));
+int libiphoned_get_max_packet_len(void);
+#endif /* LIBIPHONED_H_ */

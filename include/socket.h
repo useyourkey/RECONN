@@ -61,6 +61,5 @@ void addSocketToList(int);
 void removeSocketFromList(int);
 void sendMasterStatusRepsonse(int, unsigned char);
 void sendSocket(int, unsigned char *, int, int);
-void sendToSocketList(unsigned char *msg_ptr, int size);
-void sendReconnResponse(int, unsigned char, unsigned char, ReconnErrCodes);
+void sendReconnResponse(int, unsigned char, unsigned char, ReconnErrCodes, ReconnMasterClientMode);
 #endif

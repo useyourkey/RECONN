@@ -244,6 +244,14 @@ void *reconnEqptTask(void *args)
 #endif
                     
                     } 
+                    else if(socketIdList[i] == -2)
+                    {
+                        if(libiphoned_tx(&eqptMsgBuf, msgSize) == -1)
+                        {
+                            printf("%s: libiphoned_tx() failed\n", __FUNCTION__);
+                        }
+
+                    }
 #ifdef SOCKET_MUTEX
                     pthread_mutex_lock(&socketMutex);
 #endif
@@ -258,7 +266,7 @@ void *reconnEqptTask(void *args)
     return 1;
 }
 
-void reconnGetEqptResponse(int theEqptFd, int theMsgId, int mySocketFd)
+void reconnGetEqptResponse(int theEqptFd, int theMsgId, int mySocketFd, ReconnMasterClientMode mode)
 {
     fd_set theFileDescriptor;
     int retCode, length, payloadIndex;
@@ -291,7 +299,7 @@ void reconnGetEqptResponse(int theEqptFd, int theMsgId, int mySocketFd)
             if(retCode < 0)
             {
                 sendReconnResponse (mySocketFd, thePacket.messageId.Byte[0],
-                        thePacket.messageId.Byte[1], RECONN_INVALID_MESSAGE);
+                        thePacket.messageId.Byte[1], RECONN_INVALID_MESSAGE, mode);
                 printf("%s: select failed %d(%s)\n",__FUNCTION__, errno, strerror(errno));
             }
         }
@@ -321,7 +329,7 @@ void reconnGetEqptResponse(int theEqptFd, int theMsgId, int mySocketFd)
                 {
                     printf("%s: fstat Failed %d (%s)\n", __FUNCTION__, errno, strerror(errno));
                     sendReconnResponse (mySocketFd, thePacket.messageId.Byte[0],
-                            thePacket.messageId.Byte[1], RECONN_INVALID_MESSAGE);
+                            thePacket.messageId.Byte[1], RECONN_INVALID_MESSAGE, mode);
                 }
                 else if(S_ISCHR(FdStatus.st_mode))
                 {
@@ -336,7 +344,7 @@ void reconnGetEqptResponse(int theEqptFd, int theMsgId, int mySocketFd)
                         {
                             printf("%s: Read Failed %d (%s)\n", __FUNCTION__, errno, strerror(errno));
                             sendReconnResponse (mySocketFd, thePacket.messageId.Byte[0],
-                                    thePacket.messageId.Byte[1], RECONN_INVALID_MESSAGE);
+                                    thePacket.messageId.Byte[1], RECONN_INVALID_MESSAGE, mode);
                             return;
                         }
 #ifdef DEBUG_EQPT
