@@ -46,7 +46,7 @@
 //
 // HISTORY: Created <MM>/<DD>/<YYYY> by <USER>
 // $Header:$
-// $Revision: 1.3 $
+// $Revision: $
 // $Log:$
 //
 //******************************************************************************
@@ -116,14 +116,19 @@ static void(*presencechangecallbackfn)(void) = NULL;
 
 static iphoned_monitor_state_t iphoned_monitor_state;
 
-static int startiphoned(void);
-static int processmsg(unsigned char *msgbuf, int len);
-static void process_msg_report_iphone_presence(unsigned char presence);
+static void startiphoned(void);
+static void processmsg(unsigned char *msgbuf, int len);
+static void process_msg_report_iphone_presence(unsigned char *buf, int len);
 static void process_msg_report_data(unsigned char *buf, int len);
-static void stopiphoned();
-static int processrx(unsigned char *inbuf, int len);
+static void stopiphoned(void);
+static void processrx(unsigned char *inbuf, int len);
 static int getpidof(char const *process);
 static int send_sock_msg(unsigned char cmdid, unsigned char *outbuf, int len);
+static void stop_iphoned_monitor(void);
+static int start_iphoned_monitor(void);
+void *iphoned_monitor_thread(void *ptr);
+void *iphoned_start_service(void *ptr);
+static int connect_to_iphoned(void);
 
 static void libiphoned_log(const char *fmt, ...) {
 #ifdef LIBIPHONED_DEBUG
@@ -144,8 +149,16 @@ static void libiphoned_log(const char *fmt, ...) {
 #endif
 }
 
-static void process_msg_report_iphone_presence(unsigned char presence) {
+/**
+ * processes a MSG_REPORT_IPHONE_PRESENCE message.  monitors presence change as reported
+ * and calls the callback if it is assigned.
+ *
+ * @param buf:  pointer to buffer containing message
+ * @param len:  length of message
+ */
+static void process_msg_report_iphone_presence(unsigned char *buf, int len) {
 	static int lastpresence = -1;
+	int presence = buf[1];
 
 	if (presence == 1) {
 		iphoneconnected = TRUE;
@@ -159,16 +172,33 @@ static void process_msg_report_iphone_presence(unsigned char presence) {
 		}
 	}
 }
+
+/**
+ * processes a MSG_REPORT_DATA message.  forwards the data buffer pointer and length to
+ * the callback function if it is assigned.
+ *
+ * @param buf:  pointer to buffer containing message
+ * @param len:  length of message
+ */
 static void process_msg_report_data(unsigned char *buf, int len) {
 	if (rxcallbackfn != NULL) {
 		rxcallbackfn(&(buf[1]), len - 1);
 	}
 }
 
-static int processmsg(unsigned char *msgbuf, int len) {
+/**
+ * Message parser for iphoned messages.
+ *
+ * manages processing of all messages received from iphoned
+ * by calling a handler function and passing the message data.
+ *
+ * @param msgbuf:  pointer to buffer that holds message to be processed
+ * @param len:  length of data to be sent
+ */
+static void processmsg(unsigned char *msgbuf, int len) {
 	switch (msgbuf[0]) {
 	case MSG_REPORT_IPHONE_PRESENCE:
-		process_msg_report_iphone_presence(msgbuf[1]);
+		process_msg_report_iphone_presence(msgbuf, len);
 		break;
 	case MSG_REPORT_DATA:
 		process_msg_report_data(msgbuf, len);
@@ -178,7 +208,18 @@ static int processmsg(unsigned char *msgbuf, int len) {
 	}
 }
 
-static int processrx(unsigned char *inbuf, int len) {
+/**
+ * Stateful packet parser for iphoned packets
+ *
+ * manages processing of all data received from iphoned.
+ * Escape sequences are decoded and resulting data is parsed into packets.
+ * The packets are provided to a parsing function.  State is retained between
+ * calls.
+ *
+ * @param inbuf:  pointer to buffer that holds message to be processed
+ * @param len:  length of data to be sent
+ */
+static void processrx(unsigned char *inbuf, int len) {
 	// persistent
 	static int packetpos = 0;
 	static unsigned char currpkt[MAXPKTLEN];
@@ -190,6 +231,8 @@ static int processrx(unsigned char *inbuf, int len) {
 	unsigned int ctrlbyte = FALSE;
 
 	while (inbufpos < len) {
+
+		// handle escape and control data detection
 		ctrlbyte = -1;
 		if (is_escaped == TRUE) {
 			currbyte = inbuf[inbufpos];
@@ -205,9 +248,10 @@ static int processrx(unsigned char *inbuf, int len) {
 		}
 		inbufpos++;
 
+		// process decoded packet data
 		if (is_escaped != TRUE) {
 			if ((packetpos == 0) && (ctrlbyte != TRUE)) {
-				// do nothing
+				// out of packet data - do nothing
 			} else if (ctrlbyte == TRUE) {
 				ctrlbyte = FALSE;
 				if (currbyte == START_BYTE) {
@@ -227,21 +271,43 @@ static int processrx(unsigned char *inbuf, int len) {
 				++packetpos;
 			}
 
-			// check for packet complete
+			// check for packet complete and process if complete
 			if ((packetpos > 2) && (packetpos >= (msglen + 3))) {
 				processmsg(currpkt, msglen);
 				packetpos = 0;
 			}
 		}
 	}
-	return 0;
 }
 
-void *iphoned_start_clone(void *ptr) {
+/**
+ * thread function for starting iphoned service
+ *
+ * causes an instance of the iphoned daemon to be started and immediately exits.
+ * intended to be executed via pthread.
+ *
+ * @param ptr:  purposeless pointer to comply with expected pthread function prototype
+ */
+void *iphoned_start_service(void *ptr) {
 	system(iphoned_name);
 	return 0;
 }
 
+/**
+ * thread function for monitoring and maintaining connection to iphoned.
+ *
+ * executes a state machine loop that performs:
+ * 		attempts to connect to iphoned with retries
+ * 		maintains an open iphoned connection by
+ * 			receiving data from the socket file decriptor
+ * 			detecting connection loss
+ * 		terminates and restarts iphoned when the connection is lost
+ *
+ *
+ * 	also exits the thread when signaled via global variable
+ *
+ * @param ptr:  purposeless pointer to comply with expected pthread function prototype
+ */
 void *iphoned_monitor_thread(void *ptr) {
 	int res;
 	unsigned char rxbuf[1024];
@@ -315,6 +381,12 @@ void *iphoned_monitor_thread(void *ptr) {
 	monitorthreadrunning = FALSE;
 }
 
+/**
+ * starts monitoring for iphoned
+ *
+ * starts the iphoned monitor thread.
+ *
+ */
 static int start_iphoned_monitor(void) {
 	int res;
 
@@ -327,28 +399,40 @@ static int start_iphoned_monitor(void) {
 	return 0;
 }
 
-static int stop_iphoned_monitor(void) {
+/**
+ * stops iphoned monitor thread
+ *
+ * stops the iphoned monitor thread.  does not return until monitor thread exits.
+ *
+ */
+static void stop_iphoned_monitor(void) {
 	monitorthreadterminate = TRUE;
 	while (monitorthreadrunning == TRUE)
 		;
-	return 0;
 }
 
-static int startiphoned(void) {
-	int res;
-
-	res = pthread_create(&iphonedthread, NULL, iphoned_start_clone,
+/**
+ * starts iphoned instance
+ *
+ * causes instance of iphoned daemon to start.  uses pthread to allow immediate
+ * exit.
+ *
+ */
+static void startiphoned(void) {
+	pthread_create(&iphonedthread, NULL, iphoned_start_service,
 			(void*) "libiphoned_iphonedthread");
-	if (res != 0) {
-		return -1;
-	}
-	return 0;
 }
 
-int connect_to_iphoned() {
+/**
+ * attempts iphoned connection
+ *
+ * attempts to connect to running iphoned.  sets global file descriptor if successful.
+ *
+ * @return 0 if connected, -1 if not connected
+ */
+static int connect_to_iphoned(void) {
 	int iphoned_socket;
 	int iphoned_port;
-	int Length;
 	int flags;
 	struct sockaddr_in iphoned_ip_addr;
 	struct hostent *hp;
@@ -379,11 +463,17 @@ int connect_to_iphoned() {
 	flags = fcntl(iphoned_fd, F_GETFD);
 	flags = flags | O_NONBLOCK;
 	fcntl(iphoned_fd, F_SETFD, &flags);
-
 	return 0;
 }
 
-static void stopiphoned() {
+/**
+ * stops all running iphoned instances
+ *
+ * stops all running iphoned instances.  searches for matching PIDs and sends SIGINT to terminate
+ * gracefully.  If graceful option times out, uses non-graceful SIGKILL.
+ *
+ */
+static void stopiphoned(void) {
 	int thetime = 0;
 
 	int pid = getpidof(iphoned_name);
@@ -395,21 +485,25 @@ static void stopiphoned() {
 		if (thetime > 10000000) {
 			// if we've waited longer than 10 seconds, use other means
 			system("killall -9 iphoned");
-			libiphoned_log("timeout in normal iphoned kill");
+			libiphoned_log("timeout in graceful iphoned kill");
 			return;
 		}
 		pid = getpidof(iphoned_name);
 	}
 }
 
-int socketactive(void) {
-	if (iphoned_fd != -1) {
-		return TRUE;
-	} else {
-		return FALSE;
-	}
-}
-
+/**
+ * constructs and attempts to send packet to iphoned
+ *
+ * uses parameters to construct packet by adding start byte, length bytes and escape
+ * characters where necessary.
+ *
+ * @param cmdid:  command ID of packet to send
+ * @param outbuf:  buffer containing message to send
+ * @param len:  length of buffer containing message
+ *
+ * @return TRUE if iphoned socket is currently active.  FALSE otherwise.
+ */
 static int send_sock_msg(unsigned char cmdid, unsigned char *outbuf, int len) {
 	unsigned char *buf;
 	int i = 0;
@@ -418,7 +512,7 @@ static int send_sock_msg(unsigned char cmdid, unsigned char *outbuf, int len) {
 	int res;
 	int msglen = len + 1;
 
-	if (socketactive() == TRUE) {
+	if (iphoned_fd != -1) {
 		buf = malloc(len * 2 + 3);
 		buf[bufidx++] = START_BYTE;
 		tmp = msglen / 256;
@@ -577,8 +671,7 @@ int libiphoned_stop(void) {
 /**
  * Causes the passed data buffer to be transmitted to iphoned
  *
- * The data is sent to iphoned.  iphoned may forward the data or toss it out
- * depending on whether the iphone is connected.
+ * The data is sent to iphoned for transmission to the iphoned app
  *
  * @param buf:  pointer to buffer that holds data to be sent
  * @param len:  length of data to be sent
@@ -587,12 +680,12 @@ int libiphoned_stop(void) {
  */
 int libiphoned_tx(unsigned char *buf, unsigned int len) {
 #ifdef __SIMULATION__
-    int i;
-    for(i = 0; i < len; i++)
-    {
-        printf("0x%x ", buf[i]);
-    }
-    printf("\n");
+	int i;
+	for(i = 0; i < len; i++)
+	{
+		printf("0x%x ", buf[i]);
+	}
+	printf("\n");
 #else
 	if (send_sock_msg(MSG_FORWARD_DATA, buf, len) == 0) {
 		return 0;
