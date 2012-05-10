@@ -545,6 +545,16 @@ static int send_sock_msg(unsigned char cmdid, unsigned char *outbuf, int len) {
 	return -1;
 }
 
+/**
+ * finds PID of running process matching name
+ *
+ * searches procfs for a PID matching the given name.  returns the first PID it finds
+ * or -1 if none found.
+ *
+ * @param process:  string name of process to search for
+ *
+ * @return PID of running process matching name passed in or -1.
+ */
 static int getpidof(char const *process) {
 	DIR *dp;
 	struct dirent *entry;
