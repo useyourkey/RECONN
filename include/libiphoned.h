@@ -40,7 +40,7 @@
 // Copyright:
 //           Protected as an unpublished copyright work,
 //                    (c) Harris Corporation
-//           First fixed in 2004, all rights reserved.
+//           First fixed in 2012, all rights reserved.
 //
 //******************************************************************************
 //
