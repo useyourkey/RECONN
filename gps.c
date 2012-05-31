@@ -78,13 +78,13 @@ static ReconnErrCodes gpsOpen( int *fileDescriptor)
     if((myGpsFd = open(GPS_SERIAL_PORT, O_RDWR | O_NOCTTY | O_NONBLOCK)) < 0)
     {
         /* failed to open the serial port */
-        printf("%s: Failed to open %s\n\r", __FUNCTION__, GPS_SERIAL_PORT);
+        reconnDebugPrint("%s: Failed to open %s\n\r", __FUNCTION__, GPS_SERIAL_PORT);
         retCode = RECONN_SERIAL_PORT_OPEN_FAIL;
     }
     else
     {
         *fileDescriptor = myGpsFd;
-        printf("%s: serial port %s open.\r\n", __FUNCTION__, GPS_SERIAL_PORT);
+        reconnDebugPrint("%s: serial port %s open.\r\n", __FUNCTION__, GPS_SERIAL_PORT);
         gpsSerial.c_cflag = GPS_BAUD_RATE | CRTSCTS | GPS_DATABITS | GPS_STOPBITS
             | GPS_PARITYON | GPS_PARITY | CLOCAL | CREAD;
         gpsSerial.c_iflag = IGNPAR;
@@ -108,7 +108,7 @@ ReconnErrCodes gpsInit(int *fileDescriptor)
 
     if(reconnGpioAction(GPIO_147, ENABLE) == RECONN_FAILURE)
     {
-        printf("%s: reconnGpioAction(GPIO_147, ENABLE) failed. \n", __FUNCTION__);
+        reconnDebugPrint("%s: reconnGpioAction(GPIO_147, ENABLE) failed. \n", __FUNCTION__);
         retcode = RECONN_FAILURE;
     }
     else
@@ -132,7 +132,7 @@ ReconnErrCodes gpsWrite(unsigned char *buffer, int length)
 
     if (gpsPortInit == FALSE) 
     {
-        printf("%s: GPS port is not initialized\n", __FUNCTION__);
+        reconnDebugPrint("%s: GPS port is not initialized\n", __FUNCTION__);
         RetCode = RECONN_FAILURE;
         //retCode = GPS_PORT_NOT_INITIALIZED;
     }
@@ -151,7 +151,7 @@ ReconnErrCodes gpsRead(unsigned char *buffer, int *length)
 
     if (gpsPortInit == FALSE) 
     {
-        printf("%s: GPS port is not initialized\n", __FUNCTION__);
+        reconnDebugPrint("%s: GPS port is not initialized\n", __FUNCTION__);
         RetCode = RECONN_FAILURE;
     }
     else
