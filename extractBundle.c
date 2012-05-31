@@ -86,7 +86,7 @@ ReconnErrCodes extractBundle()
 
     length = sizeof(bundle); 
 
-    printf("%s: Function Entered \n", __FUNCTION__);
+    reconnDebugPrint("%s: Function Entered \n", __FUNCTION__);
 
     if((bundleFilePtr = fopen(UPGRADE_BUNDLE_NAME, "r")))
     {

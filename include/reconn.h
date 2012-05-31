@@ -76,7 +76,7 @@
 //#define DEBUG_EQPT
 //#define DEBUG_SPECTRUM
 //#define SOCKET_MUTEX
-//#define DEBUG_CONNECT
+#define DEBUG_CONNECT
 //#define DEBUG_CLIENT
 //#define DEBUG_GPIO
 
@@ -301,6 +301,7 @@ typedef struct
 
 typedef enum
 {
+    INITMODE,
     MASTERMODE,
     CLIENTMODE,
     INSERTEDMASTERMODE,

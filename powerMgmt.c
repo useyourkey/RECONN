@@ -98,36 +98,36 @@ void *reconnPwrMgmtTask(void *argument)
         *aEqptCounter = RECONN_POWER_CONSERVATION_TIME;
     }
 
-    printf("%s: **** Task Started\n", __FUNCTION__);
+    reconnDebugPrint("%s: **** Task Started\n", __FUNCTION__);
     while (1) 
     {
         sleep(60);
 #if 0   // Currently eqpt power conservation is not part of the reconn feature set.
         if((--eqptStbyCounters.PowerMeterCounter) == 0)
         {
-            printf("%s: Power Meter is going into Conservation Mode\n", __FUNCTION__);
+            reconnDebugPrint("%s: Power Meter is going into Conservation Mode\n", __FUNCTION__);
         }
         if((--eqptStbyCounters.DmmCounter) == 0)
         {
             reconnGpioAction(DMM_POWER_GPIO, DISABLE);
-            printf("%s: Dmm is going into Conservation Mode\n", __FUNCTION__);
+            reconnDebugPrint("%s: Dmm is going into Conservation Mode\n", __FUNCTION__);
         }
         if((--eqptStbyCounters.GpsCounter) == 0)
         {
             reconnGpioAction(GPS_ANTANNAE_GPIO, DISABLE);
             reconnGpioAction(GPS_ENABLE_GPIO, DISABLE);
-            printf("%s: GPS is going into Conservation Mode\n", __FUNCTION__);
+            reconnDebugPrint("%s: GPS is going into Conservation Mode\n", __FUNCTION__);
         }
         if((--eqptStbyCounters.SpectrumAnalyzerCounter) == 0)
         {
             reconnGpioAction(POWER_18V_GPIO, DISABLE);
-            printf("%s: Spectrum Analyzer is going into Conservation Mode\n", __FUNCTION__);
+            reconnDebugPrint("%s: Spectrum Analyzer is going into Conservation Mode\n", __FUNCTION__);
         }
 #endif
 
         if(!eqptStbyCounters.ReconnSystemCounter)
         {
-            printf("%s: Powering Down the system\n", __FUNCTION__);
+            reconnDebugPrint("%s: Powering Down the system\n", __FUNCTION__);
             reconnGpioAction(POWER_5V_GPIO, DISABLE);
         }
         eqptStbyCounters.ReconnSystemCounter --;
@@ -151,17 +151,17 @@ void *reconnPwrButtonTask(void *argument)
 
     (void) argument;  // quiet compiler
 
-    printf("%s: **** Task Started\n", __FUNCTION__);
+    reconnDebugPrint("%s: **** Task Started\n", __FUNCTION__);
     while(1)
     {
 #ifndef __SIMULATION__
         if((powerButtonFd = fopen(RECONN_POWER_BUTTON_GPIO_FILENAME, "r")) == NULL)
         {
-            printf("%s: fopen(RECONN_POWER_BUTTON_GPIO_FILENAME, r) failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+            reconnDebugPrint("%s: fopen(RECONN_POWER_BUTTON_GPIO_FILENAME, r) failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
         }
         else if((theButtonValue = fgetc(powerButtonFd)) == EOF)
         {
-            printf("%s: fgetc(RECONN_POWER_BUTTON_GPIO_FILENAME) == EOF %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+            reconnDebugPrint("%s: fgetc(RECONN_POWER_BUTTON_GPIO_FILENAME) == EOF %d(%s)\n", __FUNCTION__, errno, strerror(errno));
             fclose(powerButtonFd);
         }
         else
@@ -191,7 +191,7 @@ void *reconnPwrButtonTask(void *argument)
         }
         usleep(RECONN_CHECK_POWER_SWITCH);
 #else
-        printf("%s: **** Task not running due to simulation\n", __FUNCTION__);
+        reconnDebugPrint("%s: **** Task not running due to simulation\n", __FUNCTION__);
         sleep(200000);
 #endif
     }
@@ -230,7 +230,7 @@ void *reconnBatteryMonTask(void *argument)
 
     (void) argument;  // quiet compiler
 
-    printf("%s: **** Task Started\n", __FUNCTION__);
+    reconnDebugPrint("%s: **** Task Started\n", __FUNCTION__);
 
 #ifndef __SIMULATION__
     fgh = &fgh_context;
@@ -238,14 +238,14 @@ void *reconnBatteryMonTask(void *argument)
     if (status != FUEL_GAUGE_STATUS_SUCCESS)
     {
         fuel_gauge_status_string(status, &psstatus);
-        printf("%s: fuel_gauge_init() failed %d(%s)\n", __FUNCTION__, status, psstatus);
+        reconnDebugPrint("%s: fuel_gauge_init() failed %d(%s)\n", __FUNCTION__, status, psstatus);
         return &retCode;
     }
     status = fuel_gauge_open_dev(fgh, RECONN_FUEL_GAUGE_DEVICE_I2C_BUS);
     if (status != FUEL_GAUGE_STATUS_SUCCESS)
     {
         fuel_gauge_status_string(status, &psstatus);
-        printf("%s: fuel_gauge_open() failed %d(%s)\n", __FUNCTION__, status, psstatus);
+        reconnDebugPrint("%s: fuel_gauge_open() failed %d(%s)\n", __FUNCTION__, status, psstatus);
         fuel_gauge_uninit(fgh);
         return &retCode;
     }
@@ -259,10 +259,10 @@ void *reconnBatteryMonTask(void *argument)
         if (status != FUEL_GAUGE_STATUS_SUCCESS)
         {
             fuel_gauge_status_string(status, &psstatus);
-            printf("%s: fuel_gauge_get_charge_percent() failed %d(%s)\n", __FUNCTION__, status, psstatus);
+            reconnDebugPrint("%s: fuel_gauge_get_charge_percent() failed %d(%s)\n", __FUNCTION__, status, psstatus);
             if (retry_count++ > FUEL_GAUGE_RETRY_COUNT)
             {
-                printf("%s: FATAL ERROR! Unable to restore communicati0on with the fuel gauge, aborting!\n", __FUNCTION__);
+                reconnDebugPrint("%s: FATAL ERROR! Unable to restore communicati0on with the fuel gauge, aborting!\n", __FUNCTION__);
                 reconnGpioAction(BATTERY_LED_RED_GPIO, ENABLE);
                 reconnGpioAction(BATTERY_LED_GREEN_GPIO, DISABLE);
                 break;
@@ -273,7 +273,7 @@ void *reconnBatteryMonTask(void *argument)
             if (status != FUEL_GAUGE_STATUS_SUCCESS)
             {
                 fuel_gauge_status_string(status, &psstatus);
-                printf("%s: fuel_gauge_power_on_reset() failed %d(%s)\n", __FUNCTION__, status, psstatus);
+                reconnDebugPrint("%s: fuel_gauge_power_on_reset() failed %d(%s)\n", __FUNCTION__, status, psstatus);
                 reconnGpioAction(BATTERY_LED_RED_GPIO, ENABLE);
                 reconnGpioAction(BATTERY_LED_GREEN_GPIO, DISABLE);
                 break;
@@ -350,7 +350,7 @@ void *reconnBatteryMonTask(void *argument)
         }
         else
         {
-            printf("%s: fopen(RECONN_DC_POWER_GPIO_FILENAME, r) failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+            //reconnDebugPrint("%s: fopen(RECONN_DC_POWER_GPIO_FILENAME, r) failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
             chargerAttached = NOT_ATTACHED;
         }
 #endif
@@ -378,13 +378,13 @@ void *reconnBatteryMonTask(void *argument)
                     // The reading of the GPIO "value" file returns ascii 0 or 1
                     if(fread(&thermistorValue, 1, 1, dcThermistorGpioFp) == 0)
                     {
-                        printf("%s: fread(&thermistorValue, 1, 1, dcThermistorGpioFp) failed \n", __FUNCTION__, errno, strerror(errno));
+                        reconnDebugPrint("%s: fread(&thermistorValue, 1, 1, dcThermistorGpioFp) failed \n", __FUNCTION__, errno, strerror(errno));
                     }
                     fclose(dcThermistorGpioFp);
                 }
                 else
                 {
-                    printf("%s: fopen(RECONN_CHARGE_THERMISTOR_GPIO_FILENAME, r) failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+                    reconnDebugPrint("%s: fopen(RECONN_CHARGE_THERMISTOR_GPIO_FILENAME, r) failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
                 }
                 if(thermistorValue == TEMP_IN_RANGE)
                 {
@@ -408,13 +408,13 @@ void *reconnBatteryMonTask(void *argument)
     if (status != FUEL_GAUGE_STATUS_SUCCESS)
     {
         fuel_gauge_status_string(status, &psstatus);
-        printf("%s: fuel_gauge_close() failed %d(%s)\n", __FUNCTION__, status, psstatus);
+        reconnDebugPrint("%s: fuel_gauge_close() failed %d(%s)\n", __FUNCTION__, status, psstatus);
     }
     status = fuel_gauge_uninit(fgh);
     if (status != FUEL_GAUGE_STATUS_SUCCESS)
     {
         fuel_gauge_status_string(status, &psstatus);
-        printf("%s: fuel_gauge_unit() failed %d(%s)\n", __FUNCTION__, status, psstatus);
+        reconnDebugPrint("%s: fuel_gauge_unit() failed %d(%s)\n", __FUNCTION__, status, psstatus);
     }
 #endif
 
@@ -456,7 +456,7 @@ void resetPowerStandbyCounter(PowerMgmtEqptType theEqpt)
         }
         default:
         {
-            printf("%s: Invalid eqpt type %d\n", __FUNCTION__, theEqpt);
+            reconnDebugPrint("%s: Invalid eqpt type %d\n", __FUNCTION__, theEqpt);
         }
     }
     eqptStbyCounters.ReconnSystemCounter = RECONN_POWER_DOWN_TIME;

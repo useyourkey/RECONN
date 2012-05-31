@@ -75,20 +75,20 @@ void sendSocket(int socket_fd, unsigned char * buffer_s, int length, int num)
 {
     int errCode;
 #ifdef COMM_DEBUG
-    printf("%s: ", __FUNCTION__);
+    reconnDebugPrint("%s: ", __FUNCTION__);
     for (i = 0; i < length; ++i) {
-        printf("<%x>", (unsigned int) buffer_s[i]);
+        reconnDebugPrint("<%x>", (unsigned int) buffer_s[i]);
     }
-    printf("\n\n\n");
+    reconnDebugPrint("\n\n\n");
 #endif
     errCode = send(socket_fd, buffer_s, length, num);
     if(errCode == -1)
     {
-        printf("%s: send failed %d %s\n", __FUNCTION__, errno, strerror(errno));
+        reconnDebugPrint("%s: send failed %d %s\n", __FUNCTION__, errno, strerror(errno));
     }
     else if(errCode != length)
     {
-        printf("%s: send failed to send %d bytes\n", __FUNCTION__, length);
+        reconnDebugPrint("%s: send failed to send %d bytes\n", __FUNCTION__, length);
     }
 }
 void sendReconnResponse(int socket_fd, unsigned char c1, unsigned char c2, ReconnErrCodes ErrCode, ReconnMasterClientMode mode)

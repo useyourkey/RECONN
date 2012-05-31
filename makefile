@@ -12,12 +12,12 @@ LINTFLAGS:= -Wall -Wextra -Wformat
 LIBS=-lpthread -lrt
 # All dependencies should be listed here
 # to assure they get rebuilt on change
-HEADERS=powerMeter.h spectrum.h gps.h reconn.h socket.h dmm.h clientApp.h powerMgmt.h eqptResponse.h gpio.h debugMenu.h reconn_i2c.h fuelGauge.h libiphoned.h 
+HEADERS=powerMeter.h spectrum.h gps.h reconn.h socket.h dmm.h clientApp.h powerMgmt.h eqptResponse.h gpio.h debugMenu.h reconn_i2c.h fuel_gauge.h libiphoned.h 
 
 H_DEPENDENCIES:=$(addprefix include/, $(HEADERS))
 
 # All object files listed here
-OBJ=reconnApp.o gps.o powerMeter.o spectrum.o dmm.o clientApp.o socket.o powerMgmt.o eqptResponse.o gpio.o  crashHandler.o debugMenu.o reconn_i2c.o fuelGauge.o extractBundle.o version.o libiphoned.o clientMenu.o 
+OBJ=reconnApp.o gps.o powerMeter.o spectrum.o dmm.o clientApp.o socket.o powerMgmt.o eqptResponse.o gpio.o  crashHandler.o debugMenu.o reconn_i2c.o fuelGauge.o extractBundle.o version.o libiphoned.o clientMenu.o  systemMenu.o fuelGaugeMenu.o
 
 all: reconn-service
 

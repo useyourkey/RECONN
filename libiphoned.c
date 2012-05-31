@@ -40,7 +40,7 @@
 // Copyright:
 //           Protected as an unpublished copyright work,
 //                    (c) Harris Corporation
-//           First fixed in 2012, all rights reserved.
+//           First fixed in 2004, all rights reserved.
 //
 //******************************************************************************
 //
@@ -123,7 +123,7 @@ static void process_msg_report_data(unsigned char *buf, int len);
 static void stopiphoned(void);
 static void processrx(unsigned char *inbuf, int len);
 static int getpidof(char const *process);
-static void send_sock_msg(unsigned char cmdid, unsigned char *outbuf, int len);
+static int send_sock_msg(unsigned char cmdid, unsigned char *outbuf, int len);
 static void stop_iphoned_monitor(void);
 static int start_iphoned_monitor(void);
 void *iphoned_monitor_thread(void *ptr);
@@ -150,9 +150,6 @@ static void libiphoned_log(const char *fmt, ...) {
 }
 
 /**
- *
- * processes MSG_REPORT_IPHONE_PRESENCE
- *
  * processes a MSG_REPORT_IPHONE_PRESENCE message.  monitors presence change as reported
  * and calls the callback if it is assigned.
  *
@@ -177,8 +174,6 @@ static void process_msg_report_iphone_presence(unsigned char *buf, int len) {
 }
 
 /**
- * processes MSG_REPORT_DATA
- *
  * processes a MSG_REPORT_DATA message.  forwards the data buffer pointer and length to
  * the callback function if it is assigned.
  *
@@ -192,7 +187,7 @@ static void process_msg_report_data(unsigned char *buf, int len) {
 }
 
 /**
- * Message parser for iphoned protocol messages.
+ * Message parser for iphoned messages.
  *
  * manages processing of all messages received from iphoned
  * by calling a handler function and passing the message data.
@@ -236,6 +231,7 @@ static void processrx(unsigned char *inbuf, int len) {
 	unsigned int ctrlbyte = FALSE;
 
 	while (inbufpos < len) {
+
 		// handle escape and control data detection
 		ctrlbyte = -1;
 		if (is_escaped == TRUE) {
@@ -508,7 +504,7 @@ static void stopiphoned(void) {
  *
  * @return TRUE if iphoned socket is currently active.  FALSE otherwise.
  */
-static void send_sock_msg(unsigned char cmdid, unsigned char *outbuf, int len) {
+static int send_sock_msg(unsigned char cmdid, unsigned char *outbuf, int len) {
 	unsigned char *buf;
 	int i = 0;
 	int bufidx = 0;
@@ -542,7 +538,11 @@ static void send_sock_msg(unsigned char cmdid, unsigned char *outbuf, int len) {
 		}
 		res = send(iphoned_fd, buf, bufidx, 0);
 		free(buf);
+		if (res == len) {
+			return 0;
+		}
 	}
+	return -1;
 }
 
 /**
@@ -697,10 +697,12 @@ int libiphoned_tx(unsigned char *buf, unsigned int len) {
 	}
 	printf("\n");
 #else
-	send_sock_msg(MSG_FORWARD_DATA, buf, len);
+	if (send_sock_msg(MSG_FORWARD_DATA, buf, len) == 0) {
+		return 0;
+	}
 #endif
 	libiphoned_log("libiphoned_tx fail");
-	return 0;
+	return -1;
 }
 
 /**

@@ -17,29 +17,31 @@ static int masterMode();
 static int numberClients();
 static int upgrade();
 
-debugMenuStruct clientDebugMenu[] =
+static char *percentageMessage = "Battery charge is at %d%%\n";
+static char *chargerAttached =  "GPIO137 is 1\n";
+static char *chargerNotAttached =  "GPIO137 is 0\n";
+
+static int fuelPercent();
+debugMenuStruct fuelGaugeDebugMenu[] =
 {
-    {"client", "Client debug Menus", NULL, NULL, NULL},
-#ifdef __SIMULATION__
-    {NULL, NULL, "insert", "Simulates front panel iPhone insertion", iPhoneInsert},
-    {NULL, NULL, "extract", "Simulates front panel iPhone extraction", iPhoneExtract},
-    {NULL, NULL, "client", "Simulates USB client access request", clientMode},
-    {NULL, NULL, "master", "Simulates USB Master mode request", masterMode},
-#endif
-    {NULL, NULL, "sac", "Show the number of active client sessions", numberClients},
-    {NULL, NULL, "upgrade", "Execute a software upgrade", upgrade},
+    {"fuel", "Fuel gauge debug Menus", NULL, NULL, NULL},
+    {NULL, NULL, "percent", "Returns the percentage of battery charge", fuelPercent}
 };
 
-void registerClientDebugMenu()
+void registerFuelGaugeDebugMenu()
 {
-    registerDebugCommand(&clientDebugMenu[0], sizeof(clientDebugMenu)/sizeof(debugMenuStruct));
+    registerDebugCommand(&fuelGaugeDebugMenu[0], sizeof(fuelGaugeDebugMenu)/sizeof(debugMenuStruct));
 }
 
-#ifdef __SIMULATION__
-static int iPhoneInsert()
+static int fuelPercent(int theSocketFd)
 {
-    iPhoneInserted = 0;
-    reconnMasterIphone();
+    // Add 3 to account for the percentage number (0 - 100)
+    char buf[strlen(percentageMessage+3)];
+    extern short batteryPercentage;
+
+    memset(buf, 0, strlen(percentageMessage+3));
+    sprintf(buf, percentageMessage, batteryPercentage);
+    sendSocket(theSocketFd, (unsigned char *)&buf, strlen(buf), 0);
     return RECONN_SUCCESS;
 }
 
@@ -71,7 +73,6 @@ int masterMode()
     insertedMasterRead(&thePacket, 4);
     return RECONN_SUCCESS;
 }
-#endif
 
 int numberClients()
 {
@@ -133,9 +134,3 @@ int upgrade(void)
     }
     return RECONN_SUCCESS;
 }
-#ifdef __SIMULATION__
-int simulate_isiphonepresent()
-{
-    return iPhoneInserted;
-}
-#endif

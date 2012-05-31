@@ -14,18 +14,38 @@
 #include <pthread.h>
 #include <errno.h>
 #include <arpa/telnet.h>
+#include <stdarg.h>
 
 #include "reconn.h"
 #include "debugMenu.h"
 #include "powerMgmt.h"
 
+int enableExternalMessages = FALSE;
 static int debugListenFd;
-int theDebugSocketFd;
+int theDebugSocketFd= -1;
 static char debugPrompt[DEBUG_PROMPT_MAX_SIZE];
 
+void reconnDebugPrint(const char *fmt, ...)
+{
+    unsigned char theBuf[200];
+    va_list ap;
+
+    memset(theBuf, 0, 200);
+    va_start(ap, fmt);
+    vsprintf((char *)theBuf, fmt ,ap);
+    va_end(ap);
+    if ((theDebugSocketFd != -1) && (enableExternalMessages == TRUE))
+    {
+        sendSocket(theDebugSocketFd, theBuf, strlen((char *)theBuf), 0);
+    }
+    else
+    {
+        printf("%s", theBuf);
+    }
+}
 static void debugCleanUp()
 {
-    printf("%s: **** Called\n", __FUNCTION__);
+    reconnDebugPrint("%s: **** Called\n", __FUNCTION__);
     close(debugListenFd);
 }
 
@@ -56,12 +76,15 @@ static char * getInput(int theDebugSocketFd)
             sendSocket(theDebugSocketFd, DEBUG_TIMEOUT_MESSAGE, strlen(DEBUG_TIMEOUT_MESSAGE), 0);
 
             close(theDebugSocketFd);
+            theDebugSocketFd = -1;
             return 0;
         }
         if((retCode = recv((int)theDebugSocketFd, &c, 1, 0)) <= 0)
         {
-            printf("%s: recv returned %d\n", __FUNCTION__, retCode);
+            reconnDebugPrint("%s: recv returned %d\n", __FUNCTION__, retCode);
             close(theDebugSocketFd);
+            theDebugSocketFd = -1;
+            return 0;
         }
         if(c == EOF)
             break;
@@ -135,12 +158,12 @@ void *debugMenuTask(void *argument)
     /* Create the incoming (server) socket */
     if((debugListenFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) 
     {
-        printf("%s: Server Failed to initialize the incoming socket %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+        reconnDebugPrint("%s: Server Failed to initialize the incoming socket %d(%s)\n", __FUNCTION__, errno, strerror(errno));
         exit (1);
     }
     if(setsockopt(debugListenFd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0)
     {
-        printf("%s: setsockopt failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+        reconnDebugPrint("%s: setsockopt failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
     }
     
     bzero((unsigned char *) &server_addr, sizeof(server_addr));
@@ -152,7 +175,7 @@ void *debugMenuTask(void *argument)
     
     if (bind(debugListenFd, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0) 
     {
-        printf("%s: Server Failed to bind the socket\n", __FUNCTION__);
+        reconnDebugPrint("%s: Server Failed to bind the socket\n", __FUNCTION__);
         exit (0);
     }
     memset(debugPrompt, 0, DEBUG_PROMPT_MAX_SIZE);
@@ -160,19 +183,19 @@ void *debugMenuTask(void *argument)
     while (1)
     {
         /* pend on the incoming socket */
-        printf("\n\n%s: Listening\n\n", __FILE__);
+        reconnDebugPrint("\n\n%s: Listening\n\n", __FILE__);
         if(listen(debugListenFd, 5) == 0)
         {
             client_len = sizeof(client_addr);
             /* sit here and wait for a new connection request */
             if((theDebugSocketFd = accept(debugListenFd, (struct sockaddr *) &client_addr, &client_len)) < 0)
             {
-                printf("%s: Failed to open a new Client socket %d %s.\n", __FUNCTION__, errno , strerror(errno));
+                reconnDebugPrint("%s: Failed to open a new Client socket %d %s.\n", __FUNCTION__, errno , strerror(errno));
                 continue;
             }
             if (theDebugSocketFd != 0)
             {
-                printf("%s: newSocketFd = %d\r\n", __FUNCTION__, theDebugSocketFd);
+                reconnDebugPrint("%s: newSocketFd = %d\r\n", __FUNCTION__, theDebugSocketFd);
                 
                 sendSocket(theDebugSocketFd, echo_off, strlen(echo_off), 0);
                 retCode = recv((int)theDebugSocketFd, &echoAnswer, DEBUG_INPUT_LEN, 0);
@@ -191,12 +214,14 @@ void *debugMenuTask(void *argument)
                 {
                     sendSocket(theDebugSocketFd, DEBUG_TIMEOUT_MESSAGE, strlen(DEBUG_TIMEOUT_MESSAGE), 0);
                     close(theDebugSocketFd);
+                    theDebugSocketFd = -1;
                     continue;
                 }
                 if((retCode = recv((int)theDebugSocketFd, &buff, DEBUG_INPUT_LEN, 0)) <= 0)
                 {
-                    printf("%s: recv returned %d\n", __FUNCTION__, retCode);
+                    reconnDebugPrint("%s: recv returned %d\n", __FUNCTION__, retCode);
                     close(theDebugSocketFd);
+                    theDebugSocketFd = -1;
                     continue;
                 }
                 sendSocket(theDebugSocketFd, echo_on, strlen(echo_on), 0);
@@ -257,6 +282,7 @@ void *debugMenuTask(void *argument)
                                 {
                                     free(inputString);
                                     close(theDebugSocketFd);
+                                    theDebugSocketFd = -1;
                                     needHelp = 0;
                                     connected = 0;
                                 }
@@ -333,7 +359,7 @@ void *debugMenuTask(void *argument)
                         }
                         else
                         {
-                            continue;
+                            connected = FALSE;
                         }
                     }
                 }
@@ -350,11 +376,13 @@ void *debugMenuTask(void *argument)
         }
         else
         {
-            printf("%s: listen returned  =%d(%s) \n", __FUNCTION__, errno, strerror(errno));
+            reconnDebugPrint("%s: listen returned  =%d(%s) \n", __FUNCTION__, errno, strerror(errno));
             close(debugListenFd);
+            theDebugSocketFd = -1;
+
             break;
         }
     }
-    printf("%s: Exiting *******************\n",__FUNCTION__);
+    reconnDebugPrint("%s: Exiting *******************\n",__FUNCTION__);
     exit (0);
 }

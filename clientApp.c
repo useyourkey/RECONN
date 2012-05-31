@@ -93,7 +93,7 @@ int insertedMasterSocketFd = -1;
 
 static void clientCleanUp()
 {
-    printf("%s: **** Called\n", __FUNCTION__);
+    reconnDebugPrint("%s: **** Called\n", __FUNCTION__);
 }
 
 //******************************************************************************
@@ -133,7 +133,7 @@ void *reconnClientTask(void *args)
     ReconnErrCodes retCode = RECONN_SUCCESS;
     short myIndex;
     int theEqptFd;
-    int responseNeeded = FALSE;
+    int responseNeeded;
     ReconnModeAndEqptDescriptors *pModeAndEqptDescriptors;
     ReconnMasterClientMode myMode;
 #ifdef DEBUG_CLIENT
@@ -148,36 +148,29 @@ void *reconnClientTask(void *args)
     myIndex = pModeAndEqptDescriptors->clientIndex;
     myMode = pModeAndEqptDescriptors->clientMode;
 
-    printf("%s: Sending %s to client %d\n", __FUNCTION__, RECONNBEGIN, myIndex);
-    if(myMode == INSERTEDMASTERMODE)
+    reconnDebugPrint("%s: Sending %s to client %d\n", __FUNCTION__, RECONNBEGIN, myIndex);
+    if(contextPtr->Mode == INSERTEDMASTERMODE)
     {
         // Send response out the 30 pin USB 
         libiphoned_tx((unsigned char *)RECONNBEGIN, strlen(RECONNBEGIN));
 
         //
-        // An iPhone that is inserted into the front panel automatically assume mastership
-        // and therefore never send MASTER_MODE_REQ opcode. So, set the masterClientSocketFd
-        // as if MASTER_MODE_REQ was sent. 
-        //
-        // Note: reconnMasterIphone() starts inserted iPhone's 
-        //       client task.
-        //
-        masterClientSocketFd = mySocketFd;
+        // An iPhone that is inserted into the front panel 
     }
     else
     {
         sendSocket(mySocketFd, (unsigned char *)RECONNBEGIN, strlen(RECONNBEGIN), 0);
     }
 
-    printf("%s: reconnClientTask started myIndex %d\n", __FUNCTION__, myIndex);
-    printf("%s: reconnClientTask started myMode == %s\n", __FUNCTION__, (myMode == MASTERMODE) ? "Master": (myMode == CLIENTMODE) ? "Client" : "Inserted Master");
-    printf("%s: reconnClientTask started mySocketFd %d\n", __FUNCTION__, mySocketFd);
+    reconnDebugPrint("%s: reconnClientTask started myIndex %d\n", __FUNCTION__, myIndex);
+    reconnDebugPrint("%s: reconnClientTask started myMode == %s\n", __FUNCTION__, (myMode == MASTERMODE) ? "Master": (myMode == CLIENTMODE) ? "Client" : "Inserted Master");
+    reconnDebugPrint("%s: reconnClientTask started mySocketFd %d\n", __FUNCTION__, mySocketFd);
 
 
-    printf("%s: registering client with eqptTask\n", __FUNCTION__);
+    reconnDebugPrint("%s: registering client with eqptTask\n", __FUNCTION__);
     if(reconnRegisterClientApp(myIndex , mySocketFd) != RECONN_SUCCESS)
     {
-        printf("%s: reconnRegisterClientApp(%d, %d, %d) failed\n", __FUNCTION__, myIndex ,getpid(), mySocketFd);
+        reconnDebugPrint("%s: reconnRegisterClientApp(%d, %d, %d) failed\n", __FUNCTION__, myIndex ,getpid(), mySocketFd);
         if(mySocketFd >= 0)
         {
             close(mySocketFd);
@@ -185,41 +178,18 @@ void *reconnClientTask(void *args)
     }
     else
     {
-        //
-        // Only the WiFi connected master Client has a msgID to communicate with an 
-        // inserted iPhone processes. When an iphone is inserted into the toolkit's front
-        // panel a message will be sent to the queue.
-        //
-        if(myMode != CLIENTMODE)
-        {
-            mq_unlink(MASTER_CLIENT_MSG_Q_NAME);
-            masterClientMsgQAttr.mq_flags    = 0;
-            masterClientMsgQAttr.mq_maxmsg   = 200;
-            masterClientMsgQAttr.mq_msgsize  = 10;
-            
-            if((masterClientMsgQid = mq_open(MASTER_CLIENT_MSG_Q_NAME, 
-                            (O_RDWR | O_CREAT | O_NONBLOCK), 0, NULL)) == (mqd_t) -1)
-            {
-                printf("%s: mq_open() failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
-                close(mySocketFd);
-                return(1);
-            }
-            fcntl(mySocketFd, F_SETFL, O_NONBLOCK);
-        }
-
-
-
         while (connection_open == TRUE) 
         {
+            responseNeeded = FALSE;
             bzero((unsigned char *) &thePacket, sizeof(ReconnPacket));
             /* receive the command from the client */
 
-#ifdef DEBUG_CLIENT
-            printf("%s: client with index %d waiting for command\n", __FUNCTION__, myIndex);
+#if 0
+            reconnDebugPrint("%s: client with index %d waiting for command\n", __FUNCTION__, myIndex);
 #endif
             if((retCode = receive_packet_data(mySocketFd, (unsigned char *)&thePacket, &length)) == RECONN_CLIENT_SOCKET_CLOSED)
             {
-                printf("%s: Socket closed by Client\n", __FUNCTION__);
+                reconnDebugPrint("%s: Socket closed by Client %d\n", __FUNCTION__, myIndex);
                 connection_open = FALSE;
                 reconnReturnClientIndex(myIndex);
                 reconnDeRegisterClientApp(myIndex);
@@ -227,7 +197,7 @@ void *reconnClientTask(void *args)
                 {
                     if(mq_close(masterClientMsgQid) == -1)
                     {
-                        printf("%s: mq_close() failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+                        reconnDebugPrint("%s: mq_close() failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
                     }
                     masterClientMsgQid = -1;
                     masterClientSocketFd = -1;
@@ -247,7 +217,7 @@ void *reconnClientTask(void *args)
                         {
                             if(errno != EAGAIN)
                             {
-                                printf("%s: mq_receive failed %d (%s)\n", __FUNCTION__, errno, strerror(errno));
+                                reconnDebugPrint("%s: mq_receive failed %d (%s)\n", __FUNCTION__, errno, strerror(errno));
                             }
                             continue;
                         }
@@ -259,7 +229,7 @@ void *reconnClientTask(void *args)
                                 // send message to the iPhone client telling it 
                                 // that mastership has been removed because an 
                                 // iPhone has been inserted into the toolkit's 
-                                //front panel.
+                                // front panel.
                                 memset(theResponsePktPtr, 0, sizeof(theResponsePkt));
 
                                 sendReconnResponse (mySocketFd, 
@@ -276,12 +246,13 @@ void *reconnClientTask(void *args)
                             }
                             else if(masterClientMsgBuf[0] == MASTER_EXTRACTED)
                             {
-                                masterClientSocketFd = -1;
                                 reconnReturnClientIndex(myIndex);
                                 reconnDeRegisterClientApp(myIndex);
+                                masterClientSocketFd = -1;
+                                close(insertedMasterSocketFd);
                                 if(mq_close(masterClientMsgQid) == -1)
                                 {
-                                    printf("%s: mq_close() failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+                                    reconnDebugPrint("%s: mq_close() failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
                                 }
                                 masterClientMsgQid = -1;
                                 connection_open = FALSE;
@@ -291,11 +262,11 @@ void *reconnClientTask(void *args)
                 }
                 else
                 {
-                    printf("%s: Error reading from socket length == 0.\n", __FUNCTION__);
+                    reconnDebugPrint("%s: Error reading from socket length == 0.\n", __FUNCTION__);
                     /* recover from bad client read..?..?.. */
                     reconnDeRegisterClientApp(myIndex);
                     reconnReturnClientIndex(myIndex);
-                    if(myMode == MASTERMODE)
+                    if(myMode != CLIENTMODE)
                     {
                         masterClientSocketFd = -1;
                     }
@@ -304,7 +275,7 @@ void *reconnClientTask(void *args)
             }
             else if ((thePacket.messageId.Byte[0] == 0x07) && (thePacket.messageId.Byte[1] == 0x07))
             {
-                printf("%s: disconnect 0x7 0x7 received.\n", __FUNCTION__);
+                reconnDebugPrint("%s: disconnect 0x7 0x7 received.\n", __FUNCTION__);
                 /* exit command issued, not part of the command interface. */
                 if (masterClientSocketFd == mySocketFd) 
                 {
@@ -322,20 +293,20 @@ void *reconnClientTask(void *args)
             {
 #ifdef DEBUG_CLIENT
 
-                printf("%s %d: Packet received from client %d with length %d\n", __FUNCTION__, __LINE__, myIndex, length);
+                reconnDebugPrint("%s %d: Packet received from client %d with length %d\n", __FUNCTION__, __LINE__, myIndex, length);
                 debugPtr = (char *)&thePacket;
                 for(debugIndex = 0; debugIndex < length + 4; debugIndex++)
                 {
-                    printf("0x%x ", debugPtr[debugIndex]);
+                    reconnDebugPrint("0x%x ", debugPtr[debugIndex]);
                 }
-                printf("\n");
+                reconnDebugPrint("\n");
 #endif
                 /* everyone needs to know the packet length */
                 GET_DATA_LENGTH_FROM_PACKET(p_length, thePacket);
-                //printf("%s %d: p_length = %d\n", __FUNCTION__, __LINE__, p_length);
+                //reconnDebugPrint("%s %d: p_length = %d\n", __FUNCTION__, __LINE__, p_length);
 
                 GET_MSGID_FROM_PACKET(cmdid, thePacket);
-                //printf("%s %d: cmdid = 0x%x\n", __FUNCTION__, __LINE__, cmdid);
+                //reconnDebugPrint("%s %d: cmdid = 0x%x\n", __FUNCTION__, __LINE__, cmdid);
                 if((myMode == CLIENTMODE) && 
                         ((cmdid != KEEPALIVE_MESSAGE) &&
                          (cmdid != CLIENT_RESIGN_REQ) &&
@@ -358,7 +329,7 @@ void *reconnClientTask(void *args)
                         }
                         case CLIENT_RESIGN_REQ:
                         {
-                            printf("%s: Received CLIENT_RESIGN_REQ\n", __FUNCTION__);
+                            reconnDebugPrint("%s: Received CLIENT_RESIGN_REQ\n", __FUNCTION__);
                             if(myMode == INSERTEDMASTERMODE)
                             {
                                 sendReconnResponse(mySocketFd, thePacket.messageId.Byte[0], 
@@ -373,6 +344,11 @@ void *reconnClientTask(void *args)
                                 reconnReturnClientIndex(myIndex);
                                 if(myMode == MASTERMODE)
                                 {
+                                    if(mq_close(masterClientMsgQid) == -1)
+                                    {
+                                        reconnDebugPrint("%s: mq_close() failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+                                    }
+                                    masterClientMsgQid = -1;
                                     masterClientSocketFd = -1;
                                 }
                                 connection_open = FALSE;
@@ -382,7 +358,7 @@ void *reconnClientTask(void *args)
                         }
                         case CLIENT_ACCESS_REQ:
                         {
-                            printf("%s: Received CLIENT_ACCESS_REQ\n", __FUNCTION__);
+                            reconnDebugPrint("%s: Received CLIENT_ACCESS_REQ\n", __FUNCTION__);
                             sendReconnResponse(mySocketFd,
                                     thePacket.messageId.Byte[0], thePacket.messageId.Byte[1], RECONN_SUCCESS, myMode);
                             resetPowerStandbyCounter(RESET_SYSTEM_SHUTDOWN_TIME);
@@ -390,29 +366,60 @@ void *reconnClientTask(void *args)
                         }
                         case MASTER_MODE_REQ:
                         {
-                            printf("%s: Received MASTER_MODE_REQ\n", __FUNCTION__);
+                            reconnDebugPrint("%s: Received MASTER_MODE_REQ\n", __FUNCTION__);
                             if (masterClientSocketFd == mySocketFd)
                             {
                                 // This process is the master client
                                 sendReconnResponse(mySocketFd, 
                                         thePacket.messageId.Byte[0], 
                                         thePacket.messageId.Byte[1], RECONN_SUCCESS, myMode);
-                                printf("%s %d: Sending Success \n", __FUNCTION__, __LINE__);
+                                reconnDebugPrint("%s %d: Client already is Master. Sending Success \n", __FUNCTION__, __LINE__);
                             }
                             else if (masterClientSocketFd == -1)
                             {
+                                //
+                                // Only the WiFi connected master Client has the 
+                                // masterClientMsgQid to communicate with an inserted 
+                                // iPhone processes. When an iphone is inserted into 
+                                // the toolkit's front panel a message will be sent to 
+                                // the queue.
+                                //
+                                if(myMode != INSERTEDMASTERMODE)
+                                {
+                                    mq_unlink(MASTER_CLIENT_MSG_Q_NAME);
+                                    masterClientMsgQAttr.mq_flags    = 0;
+                                    masterClientMsgQAttr.mq_maxmsg   = 200;
+                                    masterClientMsgQAttr.mq_msgsize  = 10;
+
+                                    if((masterClientMsgQid = 
+                                                mq_open(MASTER_CLIENT_MSG_Q_NAME, 
+                                                    (O_RDWR | O_CREAT | 
+                                                     O_NONBLOCK), 0, NULL)) == (mqd_t) -1)
+                                    {
+                                        reconnDebugPrint("%s: mq_open() failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+                                        reconnDeRegisterClientApp(myIndex);
+                                        close(mySocketFd);
+                                        return(1);
+                                    }
+                                    fcntl(mySocketFd, F_SETFL, O_NONBLOCK);
+                                }
+                                else
+                                {
+                                    myMode = MASTERMODE;
+                                }
+
+                                // This process becomes the master client
                                 masterClientSocketFd = mySocketFd;
-                                // This process is the master client
                                 sendReconnResponse(mySocketFd, 
                                         thePacket.messageId.Byte[0],
                                         thePacket.messageId.Byte[1], RECONN_SUCCESS, myMode);
-                                printf("%s %d: Sending Success \n", __FUNCTION__, __LINE__);
+                                reconnDebugPrint("%s %d: Client %d is now the Master. Sending Success \n", __FUNCTION__, __LINE__, myIndex);
                             }
                             else
                             {
                                 sendReconnResponse(mySocketFd,
                                         thePacket.messageId.Byte[0], thePacket.messageId.Byte[1], RECONN_INVALID_MESSAGE, myMode); 
-                                printf("%s %d: Sending Failure because there is already a master \n", __FUNCTION__, __LINE__);
+                                reconnDebugPrint("%s %d: Sending Failure because there is already a master \n", __FUNCTION__, __LINE__);
                                 break;
                             }
                             resetPowerStandbyCounter(RESET_SYSTEM_SHUTDOWN_TIME);
@@ -420,7 +427,7 @@ void *reconnClientTask(void *args)
                         }
                         case MASTER_MODE_RESIGN_REQ:
                         {
-                            printf("%s: Received MASTER_MODE_RESIGN_REQ\n", __FUNCTION__);
+                            reconnDebugPrint("%s: Received MASTER_MODE_RESIGN_REQ\n", __FUNCTION__);
                             if (masterClientSocketFd == mySocketFd)
                             {
                                 sendReconnResponse(mySocketFd,
@@ -444,7 +451,7 @@ void *reconnClientTask(void *args)
                             int length;
                             char *theSwVersionString; 
 
-                            printf("%s: Received RECONN_SW_VERSION_NOTIF\n", __FUNCTION__);
+                            reconnDebugPrint("%s: Received RECONN_SW_VERSION_NOTIF\n", __FUNCTION__);
 
                             ADD_RSPID_TO_PACKET(GENERIC_RESPONSE, theResponsePktPtr);
                             ADD_MSGID_TO_PACKET(RECONN_SW_VERSION_NOTIF, theResponsePktPtr);
@@ -468,10 +475,10 @@ void *reconnClientTask(void *args)
                         {
                             extern uint8_t batteryPercentage;
 
-                            printf("%s: Received BATTERY_LEVEL_REQ\n", __FUNCTION__);
+                            reconnDebugPrint("%s: Received BATTERY_LEVEL_REQ\n", __FUNCTION__);
 
-                            sendReconnResponse (mySocketFd, (BATTERY_LEVEL_RSP & 0x00ff),
-                                    (BATTERY_LEVEL_RSP & 0xff00) >> 8, batteryPercentage, myMode);
+                            sendReconnResponse (mySocketFd, (BATTERY_LEVEL_RSP & 0xff00) >> 8,
+                                    (BATTERY_LEVEL_RSP & 0x00ff), batteryPercentage, myMode);
 
                             break;
                         }
@@ -508,7 +515,7 @@ void *reconnClientTask(void *args)
                             {
                                 if(reconnGpioAction(GPIO_141, (thePacket.dataPayload[0] == POWER_ON) ? ENABLE : DISABLE) == RECONN_FAILURE)
                                 {                           
-                                    printf("%s: reconnGpioAction(GPIO_141, ENABLE/DISABLE) failed. \n", __FUNCTION__);                          
+                                    reconnDebugPrint("%s: reconnGpioAction(GPIO_141, ENABLE/DISABLE) failed. \n", __FUNCTION__);                          
                                     sendReconnResponse (mySocketFd, 
                                             thePacket.messageId.Byte[0],
                                             thePacket.messageId.Byte[1], RECONN_INVALID_MESSAGE, myMode); 
@@ -531,12 +538,12 @@ void *reconnClientTask(void *args)
                         case SPECANA_PKT_SEND_REQ:
                         {
 #ifdef DEBUG_SPECTRUM
-                            printf("%s: Received  SPECANA_PKT_SEND_REQ\n", __FUNCTION__);
+                            reconnDebugPrint("%s: Received  SPECANA_PKT_SEND_REQ\n", __FUNCTION__);
 #endif
                             if (masterClientSocketFd == mySocketFd) 
                             {
 #ifdef DEBUG_SPECTRUM
-                                printf("%s: Calling SpectrumAnalyzerWrite p_length = %d \n", __FUNCTION__, p_length);
+                                reconnDebugPrint("%s: Calling SpectrumAnalyzerWrite p_length = %d \n", __FUNCTION__, p_length);
 #endif
                                 SpectrumAnalyzerWrite((unsigned char *)&(thePacket.dataPayload), p_length);
                                 responseId = SPECANA_PKT_RCVD_NOTIFICATION;
@@ -594,10 +601,10 @@ void *reconnClientTask(void *args)
                         }
                         case PMETER_PKT_SEND_REQ:
                         {
-                            printf("%s: Received  PMETER_PKT_SEND_REQ:\n", __FUNCTION__);
+                            reconnDebugPrint("%s: Received  PMETER_PKT_SEND_REQ:\n", __FUNCTION__);
                             if (masterClientSocketFd == mySocketFd) 
                             {
-                                printf("%s: Sending %c of length %d to power meter\n", __FUNCTION__, thePacket.dataPayload[0], p_length);
+                                reconnDebugPrint("%s: Sending %c of length %d to power meter\n", __FUNCTION__, thePacket.dataPayload[0], p_length);
                                 // The power meter is a USB device that can be plugged in at any time.
                                 // If the meter is plugged in at boot time, PeripherliInit() would have
                                 // opened ttyUSB1.  If this call returns RECONN_PM_PORT_NOT_INITIALIZED
@@ -648,14 +655,14 @@ void *reconnClientTask(void *args)
                         }
                         case DMM_PKT_SEND_REQ:
                         {
-                            printf("%s: Received DMM_PKT_SEND_REQ\n", __FUNCTION__);
+                            reconnDebugPrint("%s: Received DMM_PKT_SEND_REQ\n", __FUNCTION__);
                             if (masterClientSocketFd == mySocketFd) 
                             {
-                                printf("%s: Sending %c to meter\n", __FUNCTION__, thePacket.dataPayload[0]);
+                                reconnDebugPrint("%s: Sending %c to meter\n", __FUNCTION__, thePacket.dataPayload[0]);
                                 dmmWrite((unsigned char *)&(thePacket.dataPayload), p_length);
                                 sendReconnResponse(mySocketFd,
                                         thePacket.messageId.Byte[0], thePacket.messageId.Byte[1], RECONN_SUCCESS, myMode);
-                                printf("%s: Success Sent back to client\n", __FUNCTION__);
+                                reconnDebugPrint("%s: Success Sent back to client\n", __FUNCTION__);
                                 responseId = DMM_PKT_RCVD_NOTIFICATION;
                                 theEqptFd = pModeAndEqptDescriptors->dmmFd;
                                 responseNeeded = TRUE;
@@ -665,7 +672,7 @@ void *reconnClientTask(void *args)
                         }
                         case SW_UPGRADE_REQ:
                         {
-                            printf("%s: Received SW_UPGRADE_REQ:\n", __FUNCTION__);
+                            reconnDebugPrint("%s: Received SW_UPGRADE_REQ:\n", __FUNCTION__);
                             if(reconnClientsRegistered() > 1)
                             {
                                 retCode = RECONN_UPGRADE_CLIENT_CONNECTED;
@@ -683,7 +690,7 @@ void *reconnClientTask(void *args)
                         }
                         default:
                         {
-                            printf("%s: Invalid cmdid received %u\n", __FUNCTION__, cmdid);
+                            reconnDebugPrint("%s: Invalid cmdid received %u\n", __FUNCTION__, cmdid);
                             sendReconnResponse (mySocketFd, thePacket.messageId.Byte[0], 
                                     thePacket.messageId.Byte[1], RECONN_INVALID_MESSAGE, myMode); 
                             resetPowerStandbyCounter(RESET_SYSTEM_SHUTDOWN_TIME);
@@ -691,10 +698,11 @@ void *reconnClientTask(void *args)
                         }
                     } // switch (cmdid)
                 }
-                if((myMode == MASTERMODE) && (responseNeeded))
+                if(((myMode == MASTERMODE) || myMode == INSERTEDMASTERMODE)
+                        && (responseNeeded))
                 {
 #ifdef DEBUG_EQPT
-                    printf("%s: Calling reconnGetEqptResponse(%d)\n", __FUNCTION__, theEqptFd);
+                    reconnDebugPrint("%s: Calling reconnGetEqptResponse(%d)\n", __FUNCTION__, theEqptFd);
 #endif
                     reconnGetEqptResponse(theEqptFd, responseId, mySocketFd, myMode);
                     // get data from devices 
@@ -702,7 +710,7 @@ void *reconnClientTask(void *args)
             }
         }
     }
-    printf("%s: exiting myMode = %d\n", __FUNCTION__, myMode);
+    reconnDebugPrint("%s: Client %d exiting myMode = %d\n", __FUNCTION__, myIndex, myMode);
     return &retStatus;
 }
 
@@ -729,7 +737,7 @@ ReconnErrCodes receive_packet_data(int socket, unsigned char *buffer, int *lengt
     }
     else if (len != 4) 
     {
-        printf("%s: recv is less than 4 len = %d\n", __FUNCTION__, len);
+        reconnDebugPrint("%s: recv is less than 4 len = %d\n", __FUNCTION__, len);
         *length = -1;
         return (-1);
     }
@@ -737,10 +745,10 @@ ReconnErrCodes receive_packet_data(int socket, unsigned char *buffer, int *lengt
     {
 
 #ifdef COMM_DEBUG
-        printf("%s %d: ", __FUNCTION__, __LINE__);
+        reconnDebugPrint("%s %d: ", __FUNCTION__, __LINE__);
         for (i = 0; i < 4; ++i) 
         {
-            printf("[%x]", (unsigned int) buffer[i]);
+            reconnDebugPrint("[%x]", (unsigned int) buffer[i]);
         }
 #endif
 
@@ -750,11 +758,11 @@ ReconnErrCodes receive_packet_data(int socket, unsigned char *buffer, int *lengt
         {
             recv(socket, &buffer[loop + 4], 1, 0);
 #ifdef COMM_DEBUG
-            printf("[%x]", (unsigned int) buffer[loop + 4]);
+            reconnDebugPrint("[%x]", (unsigned int) buffer[loop + 4]);
 #endif
         }
 #ifdef COMM_DEBUG
-        printf("\n");
+        reconnDebugPrint("\n");
 #endif
     *length = count + 4;
     return (count + 4);
@@ -778,7 +786,7 @@ ReconnErrCodes formatReconnPacket(int theMsgId, char *theData, int theDataLength
     }
     else
     {
-        printf("%s: data length (%d) is larger than %d\n" , __FUNCTION__, theDataLength, MAX_COMMAND_INPUT);
+        reconnDebugPrint("%s: data length (%d) is larger than %d\n" , __FUNCTION__, theDataLength, MAX_COMMAND_INPUT);
         retCode = RECONN_FAILURE;
     }
     return retCode;
@@ -787,8 +795,6 @@ ReconnErrCodes formatReconnPacket(int theMsgId, char *theData, int theDataLength
 
 void insertedMasterRead(unsigned char *dataPtr, int dataLength)
 {
-    int fd;
-    struct sockaddr_in masterTransmitAddr;
     extern int fromLibToClientfd;
 
     if(insertedMasterSocketFd != -1)
@@ -799,13 +805,11 @@ void insertedMasterRead(unsigned char *dataPtr, int dataLength)
 
 void *insertedMasterTransmitTask()
 {
-    int in_socket_fd, inPort, dataLength;
+    int in_socket_fd, inPort;
     struct sockaddr_in server_addr;
-    unsigned char dataBuf[RECONN_RSP_PAYLOAD_SIZE];
-
     if((in_socket_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
     {
-        printf("%s: Server Failed to initialize the incoming socket %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+        reconnDebugPrint("%s: Server Failed to initialize the incoming socket %d(%s)\n", __FUNCTION__, errno, strerror(errno));
         return (0);
     }
 
@@ -817,7 +821,7 @@ void *insertedMasterTransmitTask()
     server_addr.sin_port = htons(inPort);
     if (bind(in_socket_fd, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0)
     {
-        printf("%s: Server Failed to bind the socket %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+        reconnDebugPrint("%s: Server Failed to bind the socket %d(%s)\n", __FUNCTION__, errno, strerror(errno));
         exit (0);
     }
     while(1)
@@ -826,7 +830,7 @@ void *insertedMasterTransmitTask()
         {
             if((insertedMasterSocketFd = accept(in_socket_fd, (struct sockaddr *) NULL, NULL)) < 0)
             {
-                printf("%s: Failed to open a new Client socket %d %s.\n", __FUNCTION__, errno , strerror(errno));
+                reconnDebugPrint("%s: Failed to open a new Client socket %d %s.\n", __FUNCTION__, errno , strerror(errno));
             }
         }
     }

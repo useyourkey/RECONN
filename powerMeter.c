@@ -77,10 +77,10 @@ static ReconnErrCodes powerMeterOpen(int *fileDescriptor)
     int bytesRead, dataLength = 200;
     unsigned char meterData[dataLength];
 
-    printf("%s: Function Entered\n", __FUNCTION__);
+    reconnDebugPrint("%s: Function Entered\n", __FUNCTION__);
     if((myMeterFd = open(POWER_METER_DEV, O_RDWR | O_NOCTTY | O_NONBLOCK)) < 0)
     {
-        printf("%s: Failed to open %s\n", __FUNCTION__, POWER_METER_DEV);
+        reconnDebugPrint("%s: Failed to open %s\n", __FUNCTION__, POWER_METER_DEV);
         retCode = RECONN_POWER_METER_OPEN_FAIL;
         *fileDescriptor = -1;
     }
@@ -101,19 +101,19 @@ static ReconnErrCodes powerMeterOpen(int *fileDescriptor)
         // text returned then the device at ttyUSB1 is infact a power meter and therefore we can
         // say initializationis complete.
 
-        printf("%s: Calling send \n", __FUNCTION__);
+        reconnDebugPrint("%s: Calling send \n", __FUNCTION__);
         memset(meterData, 0, dataLength);
         write(myMeterFd, POWER_METER_COMMAND, 2);
         sleep(1);
         if((bytesRead = read(myMeterFd, &meterData, dataLength)) < 0)
         {
-            printf("%s: read failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+            reconnDebugPrint("%s: read failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
             retCode = RECONN_FAILURE;
         }
         else if(strstr((const char *)&meterData, "Power Meter"))
         {
             PowerMeterPortInit = TRUE;
-            printf("%s: Power Meter Init Complete\r\n", __FUNCTION__);
+            reconnDebugPrint("%s: Power Meter Init Complete\r\n", __FUNCTION__);
         }
         else
         {

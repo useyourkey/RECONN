@@ -83,18 +83,18 @@ ReconnErrCodes reconnRegisterClientApp(short theIndex, int theSocket)
     if(theIndex < RECONN_MAX_NUM_CLIENTS)
     {
 #ifdef SOCKET_MUTEX
-        printf("%s: Calling pthread_mutex_lock\n", __FUNCTION__);
+        reconnDebugPrint("%s: Calling pthread_mutex_lock\n", __FUNCTION__);
         pthread_mutex_lock(&socketMutex);
 #endif
         socketIdList[theIndex] = theSocket;
 #ifdef SOCKET_MUTEX
-        printf("%s: Calling pthread_mutex_unlock\n", __FUNCTION__);
+        reconnDebugPrint("%s: Calling pthread_mutex_unlock\n", __FUNCTION__);
         pthread_mutex_unlock(&socketMutex);
 #endif
     }
     else
     {
-        printf("%s: index out of range %d\n", __FUNCTION__, theIndex);
+        reconnDebugPrint("%s: index out of range %d\n", __FUNCTION__, theIndex);
         retCode = RECONN_FAILURE;
     }
     return(retCode);
@@ -117,7 +117,7 @@ ReconnErrCodes reconnDeRegisterClientApp(short theIndex)
     }
     else
     {
-        printf("%s: index out of range %d\n", __FUNCTION__, theIndex);
+        reconnDebugPrint("%s: index out of range %d\n", __FUNCTION__, theIndex);
         retCode = RECONN_FAILURE;
     }
 
@@ -128,7 +128,7 @@ int reconnClientsRegistered()
 {
     int i, numClients = 0;
 #ifdef SOCKET_MUTEX
-    printf("%s: Calling pthread_mutex_lock\n", __FUNCTION__);
+    reconnDebugPrint("%s: Calling pthread_mutex_lock\n", __FUNCTION__);
     pthread_mutex_lock(&socketMutex);
 #endif
     for(i = 0; i < RECONN_MAX_NUM_CLIENTS; i++)
@@ -139,7 +139,7 @@ int reconnClientsRegistered()
         }
     }
 #ifdef SOCKET_MUTEX
-    printf("%s: Calling pthread_mutex_unlock\n", __FUNCTION__);
+    reconnDebugPrint("%s: Calling pthread_mutex_unlock\n", __FUNCTION__);
     pthread_mutex_unlock(&socketMutex);
 #endif
     return (numClients);
@@ -149,21 +149,21 @@ ReconnErrCodes reconnEqptAddMsgToQ(const char *theMsgPtr, int theMsgSize)
 {
     ReconnErrCodes retCode = RECONN_SUCCESS;
 #ifdef DEBUG_EQPT
-    printf("%s: calling mq_send with theMsgSize = %d\n", __FUNCTION__, theMsgSize);
+    reconnDebugPrint("%s: calling mq_send with theMsgSize = %d\n", __FUNCTION__, theMsgSize);
 #endif
     if(theMsgPtr == NULL)
     {
-        printf("******** %s: theMsgPtr is NULL\n", __FUNCTION__);
+        reconnDebugPrint("******** %s: theMsgPtr is NULL\n", __FUNCTION__);
         retCode = RECONN_FAILURE;
     }
     else if(theMsgSize > RECONN_RSP_PAYLOAD_SIZE + 6)
     {
-        printf("\n\n******** %s: theMsgSize == %d\n", __FUNCTION__, theMsgSize);
+        reconnDebugPrint("\n\n******** %s: theMsgSize == %d\n", __FUNCTION__, theMsgSize);
         retCode = RECONN_FAILURE;
     }
     else if(mq_send(EqptMsgQid, theMsgPtr, theMsgSize, 0) != 0)
     {
-        printf("\n\n******** %s: mq_send() failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+        reconnDebugPrint("\n\n******** %s: mq_send() failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
         retCode = RECONN_FAILURE;
     }
     return(retCode);
@@ -175,7 +175,7 @@ static void reconnEqptCleanUp()
 {
     int i;
 
-    printf("%s: ***** Called\n", __FUNCTION__);
+    reconnDebugPrint("%s: ***** Called\n", __FUNCTION__);
     for(i = 0; i < RECONN_MAX_NUM_CLIENTS; i++)
     {
         if(socketIdList[i] != -1)
@@ -190,8 +190,9 @@ static void reconnEqptCleanUp()
 void *reconnEqptTask(void *args)
 {
     int msgSize, i;
+    int bytesSent;
 
-    printf("%s: ***** Started\n", __FUNCTION__);
+    reconnDebugPrint("%s: ***** Started\n", __FUNCTION__);
     for(i = 0 ;i < RECONN_MAX_NUM_CLIENTS; i++)
     {
 #ifdef SOCKET_MUTEX
@@ -211,7 +212,7 @@ void *reconnEqptTask(void *args)
     EqptMsgQid = mq_open(EQPT_MSG_Q_NAME, O_RDWR | O_CREAT, NULL, NULL);
     if(EqptMsgQid == (mqd_t) -1)
     {
-        printf("%s: mq_open() failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+        reconnDebugPrint("%s: mq_open() failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
     }
     else
     {
@@ -220,13 +221,13 @@ void *reconnEqptTask(void *args)
         {
             if((msgSize = mq_receive(EqptMsgQid, (char *)&eqptMsgBuf, eqptMsgQattr.mq_msgsize , NULL)) == -1)
             {
-                printf("%s: mq_receive failed %d (%s)\n", __FUNCTION__, errno, strerror(errno));
+                reconnDebugPrint("%s: mq_receive failed %d (%s)\n", __FUNCTION__, errno, strerror(errno));
                 break;
             }
             else
             {
 #ifdef DEBUG_EQPT
-                printf("%s: received message of length %d \n", __FUNCTION__, msgSize);
+                reconnDebugPrint("%s: received message of length %d \n", __FUNCTION__, msgSize);
 #endif
                 for(i = 0; i < RECONN_MAX_NUM_CLIENTS; i++)
                 {
@@ -236,33 +237,25 @@ void *reconnEqptTask(void *args)
                     if(socketIdList[i] > 0)
                     {
 #ifdef DEBUG_EQPT
-                        printf("%s: Sending message to client socket %d\n", __FUNCTION__, socketIdList[i]);
+                        reconnDebugPrint("%s: Sending message to client socket %d\n", __FUNCTION__, socketIdList[i]);
 #endif
-                        send(socketIdList[i], &eqptMsgBuf, msgSize, 0);
+                        bytesSent = send(socketIdList[i], &eqptMsgBuf, msgSize, 0);
 #ifdef DEBUG_EQPT
-                        printf("%s: done\n", __FUNCTION__);
+                        reconnDebugPrint("%s: done sending %d bytes\n", __FUNCTION__, bytesSent);
 #endif
                     
                     } 
-                    else if(socketIdList[i] == -2)
-                    {
-                        if(libiphoned_tx(&eqptMsgBuf, msgSize) == -1)
-                        {
-                            printf("%s: libiphoned_tx() failed\n", __FUNCTION__);
-                        }
-
-                    }
 #ifdef SOCKET_MUTEX
                     pthread_mutex_lock(&socketMutex);
 #endif
                 }
 #ifdef DEBUG_EQPT
-                printf("%s: Done sending message to clients\n", __FUNCTION__);
+                reconnDebugPrint("%s: Done sending message to clients\n", __FUNCTION__);
 #endif
             }
         }
     }
-    printf("%s: ********** returning. Should not happen\n", __FUNCTION__);
+    reconnDebugPrint("%s: ********** returning. Should not happen\n", __FUNCTION__);
     return 1;
 }
 
@@ -287,7 +280,7 @@ void reconnGetEqptResponse(int theEqptFd, int theMsgId, int mySocketFd, ReconnMa
     waitTime.tv_usec = 200000;
 
 #ifdef DEBUG_EQPT
-    printf("%s: Calling select for Fd %d \n",__FUNCTION__, theEqptFd);
+    reconnDebugPrint("%s: Calling select for Fd %d \n",__FUNCTION__, theEqptFd);
 #endif
 
     ADD_RSPID_TO_PACKET(GENERIC_RESPONSE, thePacketPtr);
@@ -300,13 +293,13 @@ void reconnGetEqptResponse(int theEqptFd, int theMsgId, int mySocketFd, ReconnMa
             {
                 sendReconnResponse (mySocketFd, thePacket.messageId.Byte[0],
                         thePacket.messageId.Byte[1], RECONN_INVALID_MESSAGE, mode);
-                printf("%s: select failed %d(%s)\n",__FUNCTION__, errno, strerror(errno));
+                reconnDebugPrint("%s: select failed %d(%s)\n",__FUNCTION__, errno, strerror(errno));
             }
         }
         else if(retCode == 0)
         {
 #ifdef DEBUG_EQPT
-            printf("%s: select timedout\n",__FUNCTION__);
+            reconnDebugPrint("%s: select timedout\n",__FUNCTION__);
 #endif
             // see if it was a timeout. If it is then the equipment did not need to respond so
             // simply return.
@@ -315,7 +308,7 @@ void reconnGetEqptResponse(int theEqptFd, int theMsgId, int mySocketFd, ReconnMa
         else if (retCode != 0)
         {
 #ifdef DEBUG_EQPT
-            printf("%s:\n\n********************* select returned\n",__FUNCTION__);
+            reconnDebugPrint("%s:\n\n********************* select returned\n",__FUNCTION__);
 #endif
             payloadIndex = 0;
             memset((char *)&(thePacket.dataPayload[0]), 0 , sizeof(RECONN_RSP_PAYLOAD_SIZE));
@@ -323,18 +316,18 @@ void reconnGetEqptResponse(int theEqptFd, int theMsgId, int mySocketFd, ReconnMa
             if(FD_ISSET(theEqptFd,  &theFileDescriptor))
             {
 #ifdef DEBUG_EQPT
-                printf("%s: Equipment has responded fd = %d \n", __FUNCTION__, theEqptFd);
+                reconnDebugPrint("%s: Equipment has responded fd = %d \n", __FUNCTION__, theEqptFd);
 #endif
                 if (fstat(theEqptFd, &FdStatus) < 0)
                 {
-                    printf("%s: fstat Failed %d (%s)\n", __FUNCTION__, errno, strerror(errno));
+                    reconnDebugPrint("%s: fstat Failed %d (%s)\n", __FUNCTION__, errno, strerror(errno));
                     sendReconnResponse (mySocketFd, thePacket.messageId.Byte[0],
                             thePacket.messageId.Byte[1], RECONN_INVALID_MESSAGE, mode);
                 }
                 else if(S_ISCHR(FdStatus.st_mode))
                 {
 #ifdef DEBUG_EQPT
-                    printf("%s: is a character device\n", __FUNCTION__);
+                    reconnDebugPrint("%s: is a character device\n", __FUNCTION__);
 #endif
                     while((length = read(theEqptFd, 
                                     (unsigned char *)&(thePacket.dataPayload[payloadIndex]), 
@@ -342,13 +335,13 @@ void reconnGetEqptResponse(int theEqptFd, int theMsgId, int mySocketFd, ReconnMa
                     {
                         if(length < 0)
                         {
-                            printf("%s: Read Failed %d (%s)\n", __FUNCTION__, errno, strerror(errno));
+                            reconnDebugPrint("%s: Read Failed %d (%s)\n", __FUNCTION__, errno, strerror(errno));
                             sendReconnResponse (mySocketFd, thePacket.messageId.Byte[0],
                                     thePacket.messageId.Byte[1], RECONN_INVALID_MESSAGE, mode);
                             return;
                         }
 #ifdef DEBUG_EQPT
-                        printf("%s: read %d bytes\n", __FUNCTION__, length);
+                        reconnDebugPrint("%s: read %d bytes\n", __FUNCTION__, length);
 #endif
                         payloadIndex += length;
                     }
@@ -356,31 +349,38 @@ void reconnGetEqptResponse(int theEqptFd, int theMsgId, int mySocketFd, ReconnMa
                     debugPtr = (char *)&(thePacket.dataPayload[0]);
                     for(debugIndex = 0; debugIndex < payloadIndex; debugIndex++, debugPtr++)
                     {
-                        printf("0x%x ", *debugPtr);
+                        reconnDebugPrint("0x%x ", *debugPtr);
                     }
-                    printf("\n");
+                    reconnDebugPrint("\n");
 #endif
                     ADD_DATA_LENGTH_TO_PACKET(payloadIndex, thePacketPtr);
-                    /*
-                     * Add 4 to account for the MSGID and Data length 
-                     */
-#ifdef DEBUG_EQPT
-                    printf("%s: Calling reconnEqptAddMsgToQ %d \n", __FUNCTION__,  payloadIndex + 6);
-#endif
                      //send(mySocketFd, (char *)thePacketPtr, payloadIndex + 6, 0);
-                    reconnEqptAddMsgToQ((char *)thePacketPtr, payloadIndex + 6);
+                   if(mode == INSERTEDMASTERMODE) 
+                   {
+#ifdef DEBUG_EQPT
+                       reconnDebugPrint("%s: Calling libiphoned_tx %d \n", __FUNCTION__,  payloadIndex + 6);
+#endif
+                       libiphoned_tx((unsigned char *)thePacketPtr, payloadIndex + 6);
+                   }
+#ifdef DEBUG_EQPT
+                    reconnDebugPrint("%s: Calling reconnEqptAddMsgToQ %d \n", __FUNCTION__,  payloadIndex + 6);
+#endif
+                   reconnEqptAddMsgToQ((char *)thePacketPtr, payloadIndex + 6);
                 }
                 else
                 {
                     receive_packet_data(theEqptFd, (unsigned char *)&(thePacket.dataPayload), &length);
                     ADD_DATA_LENGTH_TO_PACKET(length, thePacketPtr);
-                    reconnEqptAddMsgToQ((char *)thePacketPtr, length + 6);
+                    if(mode == INSERTEDMASTERMODE) 
+                    {
+                        libiphoned_tx((unsigned char *)thePacketPtr, length + 6);
+                    }
                 }
             }
         }
     }
 #ifdef DEBUG_EQPT
-    printf("%s: returning\n",__FUNCTION__);
+    reconnDebugPrint("%s: returning\n",__FUNCTION__);
 #endif
 }
 

@@ -92,13 +92,14 @@ static ReconnErrCodes SpectrumAnalyzerOpen(int *fileDescriptor)
 
     if((myAnalyzerFd = open(SPECTRUM_ANALYZER_DEV, O_RDWR | O_NOCTTY | O_NONBLOCK)) < 0)
     {
-        printf("%s: Failed to open %s\n\r", __FUNCTION__, SPECTRUM_ANALYZER_DEV);
+        reconnDebugPrint("%s: Failed to open %s\n\r", __FUNCTION__, SPECTRUM_ANALYZER_DEV);
         /* failed to open the device */
         retCode = RECONN_SERIAL_PORT_OPEN_FAIL;
     }
     else
     {
-        printf("\n%s: serial port %s Opened\n", __FUNCTION__, SPECTRUM_ANALYZER_DEV);
+        reconnDebugPrint("\n%s: serial port %s Opened\n", __FUNCTION__, SPECTRUM_ANALYZER_DEV);
+        reconnDebugPrint("\n%s: Spectrum Analyer FD = %d Opened\n", __FUNCTION__, myAnalyzerFd);
 
         *fileDescriptor = myAnalyzerFd;
         //analyzerSerial.c_cflag = SPECTRUM_ANALYZER_BAUD_RATE | CRTSCTS | SPECTRUM_ANALYZER_DATABITS |
@@ -116,7 +117,7 @@ static ReconnErrCodes SpectrumAnalyzerOpen(int *fileDescriptor)
 
         SAPortInit = TRUE;
         /* end Power Meter Init */
-        printf("%s: Spectrum Analyzer Init Complete\n\n", __FUNCTION__);
+        reconnDebugPrint("%s: Spectrum Analyzer Init Complete\n\n", __FUNCTION__);
         /* Now send any commands that might need to be used to initialize the Power Meter */
     }
 
@@ -125,7 +126,7 @@ static ReconnErrCodes SpectrumAnalyzerOpen(int *fileDescriptor)
     myAnalyzerFd = socket(AF_INET, SOCK_STREAM, 0);
     if (myAnalyzerFd < 0)
     {
-        printf("%s: ERROR opening sa socket %d %s", __FUNCTION__, errno, strerror(errno));
+        reconnDebugPrint("%s: ERROR opening sa socket %d %s", __FUNCTION__, errno, strerror(errno));
         retCode = RECONN_FAILURE;
     }
     else
@@ -146,13 +147,13 @@ static ReconnErrCodes SpectrumAnalyzerOpen(int *fileDescriptor)
 
         if (connect(myAnalyzerFd, (struct sockaddr *) &SA_IP_addr, sizeof(SA_IP_addr)) < 0) 
         {
-            printf("%s: Spectrum Analyzer connect failed to %s\r\n", __FUNCTION__, SPECTRUM_ANALYZER_IP);
+            reconnDebugPrint("%s: Spectrum Analyzer connect failed to %s\r\n", __FUNCTION__, SPECTRUM_ANALYZER_IP);
             retCode = RECONN_CONNECT_FAILED;
         }
         else
         {
             *fileDescriptor = myAnalyzerFd;
-            printf("%s: SA Connect Opened\r\n", __FUNCTION__);
+            reconnDebugPrint("%s: SA Connect Opened\r\n", __FUNCTION__);
             flags = fcntl(myAnalyzerFd, F_GETFD);
             flags = flags | O_NONBLOCK;
             fcntl(myAnalyzerFd, F_SETFD, &flags);
@@ -171,7 +172,7 @@ ReconnErrCodes SpectrumAnalyzerInit(int *fileDescriptor)
     *fileDescriptor = -1;
     if(reconnGpioAction(GPIO_141, ENABLE) == RECONN_FAILURE)
     {
-        printf("%s: reconnGpioAction(GPIO_141, ENABLE) failed. \n", __FUNCTION__);
+        reconnDebugPrint("%s: reconnGpioAction(GPIO_141, ENABLE) failed. \n", __FUNCTION__);
         retcode = RECONN_FAILURE;
     }
     else 
@@ -198,25 +199,25 @@ ReconnErrCodes SpectrumAnalyzerWrite(unsigned char *buffer, int length)
 
     if (SAPortInit == FALSE) 
     {
-        printf("%s: Spectrum Analyzer port is not initialized\n", __FUNCTION__);
+        reconnDebugPrint("%s: Spectrum Analyzer port is not initialized\n", __FUNCTION__);
         retcode =  RECONN_FAILURE;
     }
     else
     {
 #ifdef DEBUG_SPECTRUM
-        printf("%s: writing data to the analyzer length = %d\n", __FUNCTION__, length);
+        reconnDebugPrint("%s: writing data to the analyzer length = %d\n", __FUNCTION__, length);
         for(debugIndex = 0; debugIndex < length; debugIndex++)
         {
-            printf("0x%x ", buffer[debugIndex]);
+            reconnDebugPrint("0x%x ", buffer[debugIndex]);
         }
 #endif
 
         if (write(myAnalyzerFd, buffer, length) < 0)
         {
-            printf("%s: write(%d, buffer, %d) failed\n\r", __FUNCTION__, myAnalyzerFd, length);
+            reconnDebugPrint("%s: write(%d, buffer, %d) failed\n\r", __FUNCTION__, myAnalyzerFd, length);
         }
 #ifdef DEBUG_SPECTRUM
-        printf("\n");
+        reconnDebugPrint("\n");
 #endif
     }
     return (retcode);
@@ -231,7 +232,7 @@ ReconnErrCodes SpectrumAnalyzerRead(unsigned char *buffer, int *length)
 
     if (SAPortInit == FALSE) 
     {
-        printf("%s: Spectrum Analyzer port is not initialized\n", __FUNCTION__);
+        reconnDebugPrint("%s: Spectrum Analyzer port is not initialized\n", __FUNCTION__);
         retcode = RECONN_FAILURE;
     }
     else 

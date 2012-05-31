@@ -75,13 +75,13 @@ static ReconnErrCodes dmmOpen (int *fileDescriptor)
     if((myDmmFd = open(DMM_SERIAL_PORT, O_RDWR | O_NOCTTY | O_NONBLOCK)) < 0)
     {
         /* failed to open the serial port */
-        printf ("%s: Failed to open serial port %s\n\r", __FUNCTION__, DMM_SERIAL_PORT);
+        reconnDebugPrint ("%s: Failed to open serial port %s\n\r", __FUNCTION__, DMM_SERIAL_PORT);
         RetCode = RECONN_DMM_SERIAL_PORT_OPEN_FAIL;
         *fileDescriptor = -1;
     }
     else
     {
-        printf ("%s: serial port %s open.\r\n", __FUNCTION__, DMM_SERIAL_PORT);
+        reconnDebugPrint ("%s: serial port %s open.\r\n", __FUNCTION__, DMM_SERIAL_PORT);
         *fileDescriptor = myDmmFd;
         dmm_serial.c_cflag =
             DMM_BAUD_RATE | DMM_DATABITS | DMM_STOPBITS | DMM_PARITYON | DMM_PARITY | CLOCAL | CREAD;
@@ -106,7 +106,7 @@ ReconnErrCodes dmmInit(int *fileDescriptor)
 
     if(reconnGpioAction(GPIO_174, ENABLE) == RECONN_FAILURE)
     {
-        printf("%s: reconnGpioAction(GPIO_174, ENABLE) failed. \n", __FUNCTION__);
+        reconnDebugPrint("%s: reconnGpioAction(GPIO_174, ENABLE) failed. \n", __FUNCTION__);
         retcode = RECONN_FAILURE;
     }
     else
@@ -146,7 +146,7 @@ ReconnErrCodes dmmRead (unsigned  char *buffer, int *length)
 
    if (dmmPortInit == FALSE)
    {
-      printf ("%s: DMM Port not initialized \n\r", __FUNCTION__);
+      reconnDebugPrint ("%s: DMM Port not initialized \n\r", __FUNCTION__);
       RetCode = RECONN_FAILURE;
    }
    else

@@ -56,8 +56,8 @@
 #ifndef __POWERMETER_H
 #define __POWERMETER_H
 
-//#define POWER_METER_DEV      "/dev/ttyUSB1"
-#define POWER_METER_DEV      "/dev/ttyUSB0"
+#define POWER_METER_DEV      "/dev/ttyUSB1"
+//#define POWER_METER_DEV      "/dev/ttyUSB0"
 #define POWER_METER_BAUD        B115200
 #define POWER_METER_DATABITS    CS8
 #define POWER_METER_STOPBITS    0
