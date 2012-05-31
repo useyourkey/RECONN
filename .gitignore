@@ -1,0 +1,5 @@
+*.o
+cscope.*
+reconn-service
+tags
+version.c
