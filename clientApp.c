@@ -149,7 +149,7 @@ void *reconnClientTask(void *args)
     myMode = pModeAndEqptDescriptors->clientMode;
 
     reconnDebugPrint("%s: Sending %s to client %d\n", __FUNCTION__, RECONNBEGIN, myIndex);
-    if(contextPtr->Mode == INSERTEDMASTERMODE)
+    if(myMode == INSERTEDMASTERMODE)
     {
         // Send response out the 30 pin USB 
         libiphoned_tx((unsigned char *)RECONNBEGIN, strlen(RECONNBEGIN));
