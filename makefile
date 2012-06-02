@@ -2,8 +2,8 @@
 #CC=gcc
 
 INCDIR= ./include
-CC=arm-none-linux-gnueabi-gcc
-#CC= gcc -g -D __SIMULATION__
+#CC=arm-none-linux-gnueabi-gcc
+CC= gcc -g -D __SIMULATION__
 CFLAGS=-I$(INCDIR)
 
 LINTFLAGS:= -Wall -Wextra -Wformat 
@@ -20,6 +20,7 @@ H_DEPENDENCIES:=$(addprefix include/, $(HEADERS))
 OBJ=reconnApp.o gps.o powerMeter.o spectrum.o dmm.o clientApp.o socket.o powerMgmt.o eqptResponse.o gpio.o  crashHandler.o debugMenu.o reconn_i2c.o fuelGauge.o extractBundle.o version.o libiphoned.o clientMenu.o  systemMenu.o fuelGaugeMenu.o
 
 all: reconn-service
+reconnDaemon: powerDaemon.o
 
 # build all objects from all c files.
 %.o: %.c $(H_DEPENDENCIES) makefile
@@ -29,6 +30,9 @@ version.c: GenerateBuildVersion.pl
 	./GenerateBuildVersion.pl
 
 version.o: version.c
+
+powerDaemon.o: powerDaemon.c
+	$(CC) $^ -o PowerDaemon $(CFLAGS)
 
 reconn-service: $(OBJ)
 	$(CC) -o $@ $^ $(CFLAGS) $(LIBS)
