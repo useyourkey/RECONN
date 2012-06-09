@@ -670,6 +670,75 @@ void *reconnClientTask(void *args)
                             resetPowerStandbyCounter(RESET_DMM_STBY_COUNTER);
                             break;
                         }
+                        case LNB_POWER_SET_REQ:
+                        {
+                            if ((thePacket.dataPayload[0] == POWER_ON) || 
+                                    (thePacket.dataPayload[0] == POWER_OFF))
+                            {
+                                if(reconnGpioAction(LNB_ENABLE_GPIO, (thePacket.dataPayload[0] == POWER_ON) ? ENABLE : DISABLE) == RECONN_FAILURE)
+                                {                           
+                                    reconnDebugPrint("%s: reconnGpioAction(GPIO_141, ENABLE/DISABLE) failed. \n", __FUNCTION__);                          sendReconnResponse(mySocketFd, thePacket.messageId.Byte[0], 
+                                            thePacket.messageId.Byte[1], RECONN_FAILURE, myMode);
+                                }
+                                else
+                                {
+                                    sendReconnResponse(mySocketFd, thePacket.messageId.Byte[0], 
+                                            thePacket.messageId.Byte[1], RECONN_SUCCESS, myMode);
+                                }
+                            }
+                            else
+                            {
+                                sendReconnResponse (mySocketFd, thePacket.messageId.Byte[0], 
+                                        thePacket.messageId.Byte[1], RECONN_INVALID_MESSAGE, myMode); 
+                            }
+                            break;
+                        }
+                        case LNB_SA_10MHZ:
+                        {
+                            if ((thePacket.dataPayload[0] == POWER_ON) || 
+                                    (thePacket.dataPayload[0] == POWER_OFF))
+                            {
+                                if(reconnGpioAction(SA_10MHZ_GPIO, (thePacket.dataPayload[0] == POWER_ON) ? ENABLE : DISABLE) == RECONN_FAILURE)
+                                {                           
+                                    reconnDebugPrint("%s: reconnGpioAction(GPIO_141, ENABLE/DISABLE) failed. \n", __FUNCTION__);                          sendReconnResponse(mySocketFd, thePacket.messageId.Byte[0], 
+                                            thePacket.messageId.Byte[1], RECONN_FAILURE, myMode);
+                                }
+                                else
+                                {
+                                    sendReconnResponse(mySocketFd, thePacket.messageId.Byte[0], 
+                                            thePacket.messageId.Byte[1], RECONN_SUCCESS, myMode);
+                                }
+                            }
+                            else
+                            {
+                                sendReconnResponse (mySocketFd, thePacket.messageId.Byte[0], 
+                                        thePacket.messageId.Byte[1], RECONN_INVALID_MESSAGE, myMode); 
+                            }
+                            break;
+                        }
+                        case LNB_10MHZ:
+                        {
+                            if ((thePacket.dataPayload[0] == POWER_ON) || 
+                                    (thePacket.dataPayload[0] == POWER_OFF))
+                            {
+                                if(reconnGpioAction(LNB_10MHZ_GPIO, (thePacket.dataPayload[0] == POWER_ON) ? ENABLE : DISABLE) == RECONN_FAILURE)
+                                {                           
+                                    reconnDebugPrint("%s: reconnGpioAction(GPIO_141, ENABLE/DISABLE) failed. \n", __FUNCTION__);                          sendReconnResponse(mySocketFd, thePacket.messageId.Byte[0], 
+                                            thePacket.messageId.Byte[1], RECONN_FAILURE, myMode);
+                                }
+                                else
+                                {
+                                    sendReconnResponse(mySocketFd, thePacket.messageId.Byte[0], 
+                                            thePacket.messageId.Byte[1], RECONN_SUCCESS, myMode);
+                                }
+                            }
+                            else
+                            {
+                                sendReconnResponse (mySocketFd, thePacket.messageId.Byte[0], 
+                                        thePacket.messageId.Byte[1], RECONN_INVALID_MESSAGE, myMode); 
+                            }
+                            break;
+                        }
                         case SW_UPGRADE_REQ:
                         {
                             reconnDebugPrint("%s: Received SW_UPGRADE_REQ:\n", __FUNCTION__);
