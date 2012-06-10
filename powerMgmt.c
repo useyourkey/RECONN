@@ -144,9 +144,11 @@ void *reconnPwrMgmtTask(void *argument)
 //******************************************************************************
 void *reconnPwrButtonTask(void *argument)
 {
+#ifndef __SIMULATION__
     FILE *powerButtonFd;
     int theButtonValue;
     int initialPowerUp = TRUE;
+#endif
     static char retCode = '1';
 
     (void) argument;  // quiet compiler
@@ -218,6 +220,7 @@ char thermistorValue = TEMP_IN_RANGE;
 void *reconnBatteryMonTask(void *argument)
 {
     static char retCode = '1';
+#ifndef __SIMULATION__
     PowerMgmtLedColors ledColor = OFF;
     FILE *dcPowerGpioFp;
     FILE *dcThermistorGpioFp;
@@ -228,11 +231,12 @@ void *reconnBatteryMonTask(void *argument)
     int retry_count;
     int chargeEnable = FALSE;
 
+#endif
     (void) argument;  // quiet compiler
 
+#ifndef __SIMULATION__
     reconnDebugPrint("%s: **** Task Started\n", __FUNCTION__);
 
-#ifndef __SIMULATION__
     fgh = &fgh_context;
     status = fuel_gauge_init(&fgh);
     if (status != FUEL_GAUGE_STATUS_SUCCESS)
@@ -249,13 +253,10 @@ void *reconnBatteryMonTask(void *argument)
         fuel_gauge_uninit(fgh);
         return &retCode;
     }
-#endif
 
     while(1)
     {
-#ifndef __SIMULATION__
         status = fuel_gauge_get_charge_percent(fgh, &batteryPercentage);
-#endif
         if (status != FUEL_GAUGE_STATUS_SUCCESS)
         {
             fuel_gauge_status_string(status, &psstatus);
@@ -289,10 +290,16 @@ void *reconnBatteryMonTask(void *argument)
 
         if(batteryPercentage < 5)
         {
+            // To protect the battery pack we have to power down the reconn unit
+            // if the charge percentage falls below 5%
+            reconnGpioAction(POWER_5V_GPIO, ENABLE);
+        }
+        else if(batteryPercentage == 5)
+        {
             if(ledColor == RED)
             {
-                // we are less than 5% battery power so we have to flash
-                // the battery status LED between Red and off.
+                // we are at 5% battery charge percentage so we have to flash
+                // the battery status LED Red and off.
                 reconnGpioAction(BATTERY_LED_RED_GPIO, DISABLE);
                 ledColor = OFF;
             }
@@ -340,7 +347,6 @@ void *reconnBatteryMonTask(void *argument)
                 ledColor = OFF;
             }
         }
-#ifndef __SIMULATION__
         // TODO need to get GPIO 137 to determine if charger is attached
         if(dcPowerGpioFp = fopen(RECONN_DC_POWER_GPIO_FILENAME, "r"))
         {
@@ -353,9 +359,8 @@ void *reconnBatteryMonTask(void *argument)
             //reconnDebugPrint("%s: fopen(RECONN_DC_POWER_GPIO_FILENAME, r) failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
             chargerAttached = NOT_ATTACHED;
         }
-#endif
 
-        if (chargerAttached = ATTACHED)
+        if (chargerAttached == ATTACHED)
         {
             // 5% tolerance fudge
             if (batteryPercentage > 95)
@@ -403,7 +408,6 @@ void *reconnBatteryMonTask(void *argument)
         usleep((chargerAttached == ATTACHED) ? RECONN_BATTERY_MONITOR_SLEEP : RECONN_BATTERY_MONITOR_SLEEP/2 );
     }
 
-#ifndef __SIMULATION__
     status = fuel_gauge_close_dev(fgh);
     if (status != FUEL_GAUGE_STATUS_SUCCESS)
     {
@@ -416,12 +420,14 @@ void *reconnBatteryMonTask(void *argument)
         fuel_gauge_status_string(status, &psstatus);
         reconnDebugPrint("%s: fuel_gauge_unit() failed %d(%s)\n", __FUNCTION__, status, psstatus);
     }
-#endif
 
     if(dcPowerGpioFp)
     {
         fclose(dcPowerGpioFp);
     }
+#else
+    reconnDebugPrint("%s: **** Task does not run during simuation\n", __FUNCTION__);
+#endif
     return &retCode;
 }
 
