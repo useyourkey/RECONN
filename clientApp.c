@@ -81,12 +81,14 @@
 #include "gpio.h"
 #include "version.h"
 #include "upgrade.h"
+#include "debugMenu.h"
 
 // only used by a master client process
 mqd_t masterClientMsgQid = -1;
 static char  masterClientMsgBuf[4];
 static struct mq_attr masterClientMsgQAttr;
 //
+extern int libiphoned_tx(unsigned char *, unsigned int);
 
 int masterClientSocketFd = -1;
 int insertedMasterSocketFd = -1; 
@@ -122,6 +124,7 @@ void *reconnClientTask(void *args)
 {
     static int retStatus = 1;
     int mySocketFd;
+    static int state;
     int length = 0;
     int p_length = 0;
     int connection_open = TRUE;
@@ -204,7 +207,7 @@ void *reconnClientTask(void *args)
                 }
                 connection_open = FALSE;
             }
-            else if(retCode == -1)
+            else if(retCode == RECONN_ERROR_UNKNOWN)
             {
                 if(((errno == EAGAIN) || (errno == EWOULDBLOCK)) && 
                         (myMode != CLIENTMODE))
@@ -399,7 +402,7 @@ void *reconnClientTask(void *args)
                                         reconnDebugPrint("%s: mq_open() failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
                                         reconnDeRegisterClientApp(myIndex);
                                         close(mySocketFd);
-                                        return(1);
+                                        return(&state);
                                     }
                                     fcntl(mySocketFd, F_SETFL, O_NONBLOCK);
                                 }
@@ -448,7 +451,7 @@ void *reconnClientTask(void *args)
                         }
                         case RECONN_SW_VERSION_NOTIF:
                         {
-                            int length;
+                            unsigned int length;
                             char *theSwVersionString; 
 
                             reconnDebugPrint("%s: Received RECONN_SW_VERSION_NOTIF\n", __FUNCTION__);
@@ -462,11 +465,12 @@ void *reconnClientTask(void *args)
                             if(myMode == INSERTEDMASTERMODE)
                             {
                                 // Send response out the 30 pin USB 
-                                libiphoned_tx(masterClientSocketFd, (unsigned char *)theResponsePktPtr, length + 6);
+                                libiphoned_tx((unsigned char *)theResponsePktPtr, length + 6);
                             }
                             else
                             {
-                                sendSocket(masterClientSocketFd, (unsigned char *)theResponsePktPtr, length + 6, 0);
+                                sendSocket(masterClientSocketFd, (unsigned char *)theResponsePktPtr, 
+                                        length + 6, 0);
                             }
                             resetPowerStandbyCounter(RESET_SYSTEM_SHUTDOWN_TIME);
                             break;

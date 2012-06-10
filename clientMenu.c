@@ -1,9 +1,14 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 
 #include "debugMenu.h"
 #include "reconn.h"
+#include "clientApp.h"
+#include "socket.h"
+#include "upgrade.h"
+#include "eqptResponse.h"
 
 static int iPhoneInserted = -1;
 
@@ -57,7 +62,7 @@ int clientMode()
 
     ADD_MSGID_TO_PACKET(CLIENT_ACCESS_REQ, thePacketPtr);
     ADD_DATA_LENGTH_TO_PACKET(0, thePacketPtr);
-    insertedMasterRead(&thePacket, 4);
+    insertedMasterRead((unsigned char *)&thePacket, 4);
     return RECONN_SUCCESS;
 }
 
@@ -68,7 +73,7 @@ int masterMode()
 
     ADD_MSGID_TO_PACKET(MASTER_MODE_REQ, thePacketPtr);
     ADD_DATA_LENGTH_TO_PACKET(0, thePacketPtr);
-    insertedMasterRead(&thePacket, 4);
+    insertedMasterRead((unsigned char *)&thePacket, 4);
     return RECONN_SUCCESS;
 }
 #endif
@@ -79,10 +84,7 @@ int numberClients()
 
     memset((char *)&outbuf, 0, DEBUG_OUTPUT_LEN);
     sprintf((char *)&outbuf, "The number of active clients is  %d\r\n", reconnClientsRegistered());
-    if(send(theDebugSocketFd, outbuf, strlen(outbuf)) <= 0)
-    {
-        reconnDebugPrint("%s: send failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
-    }
+    sendSocket(theDebugSocketFd, (unsigned char *)&outbuf, strlen(outbuf), 0);
     return RECONN_SUCCESS;
 }
 
@@ -94,7 +96,7 @@ int upgrade(void)
     if(reconnClientsRegistered() > 0)
     {
         sprintf((char *)&outbuf, "Can't upgrade because there are %d active clients.\r\n", reconnClientsRegistered());
-        send(theDebugSocketFd, (char *)&outbuf, strlen((char *)&outbuf));
+        sendSocket(theDebugSocketFd, (unsigned char *)&outbuf, strlen((char *)&outbuf), 0);
     }
     else
     {
@@ -111,13 +113,13 @@ int upgrade(void)
                 case RECONN_UPGRADE_FILE_NOT_FOUND:
                 {
                     strcpy((char *)&outbuf, "UPGRADE ABORTED: upgrade file not found.\n");
-                    send(theDebugSocketFd, &outbuf, strlen(outbuf));
+                    sendSocket(theDebugSocketFd, (unsigned char *)&outbuf, strlen(outbuf), 0);
                     break;
                 }
                 case RECONN_UPGRADE_BAD_CHECKSUM:
                 {
                     strcpy((char *)&outbuf, "UPGRADE ABORTED: /tmp/upgradeBundle has an invalid checksum.\n");
-                    send(theDebugSocketFd, &outbuf, strlen(outbuf));
+                    sendSocket(theDebugSocketFd, (unsigned char *)&outbuf, strlen(outbuf), 0);
                     break;
                 }
                 default:
@@ -125,7 +127,7 @@ int upgrade(void)
                     strcpy((char *)&outbuf, "UPGRADE ABORTED: ");
                     strcat((char *)&outbuf, strerror(errno));
                     strcat((char *)&outbuf, "\n"); 
-                    send(theDebugSocketFd, &outbuf, strlen(outbuf));
+                    sendSocket(theDebugSocketFd, (unsigned char *)&outbuf, strlen(outbuf), 0);
                     break;
                 }
             }

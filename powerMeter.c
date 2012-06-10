@@ -64,6 +64,7 @@
 #include "reconn.h"
 #include "powerMeter.h"
 #include "gpio.h"
+#include "debugMenu.h"
 
 int myMeterFd;
 struct termios meterSerial;

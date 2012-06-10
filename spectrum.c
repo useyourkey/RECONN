@@ -64,6 +64,9 @@
 #include <string.h>
 #include <fcntl.h>
 #include <sys/mman.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+
 #include <termios.h>
 #include <unistd.h>
 #include <errno.h>
@@ -71,6 +74,7 @@
 #include "reconn.h"
 #include "spectrum.h"
 #include "gpio.h"
+#include "debugMenu.h"
 
 #define SPECTRUM_ANALYZER_DEV       "/dev/ttyUSB0"
 #define SPECTRUM_ANALYZER_BAUD_RATE B460800
@@ -195,7 +199,9 @@ ReconnErrCodes SpectrumAnalyzerInit(int *fileDescriptor)
 ReconnErrCodes SpectrumAnalyzerWrite(unsigned char *buffer, int length) 
 {
     ReconnErrCodes retcode = RECONN_SUCCESS;
+#ifdef DEBUG_SPECTRUM
     int debugIndex; 
+#endif
 
     if (SAPortInit == FALSE) 
     {

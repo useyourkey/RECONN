@@ -19,6 +19,7 @@
 #include "reconn.h"
 #include "debugMenu.h"
 #include "powerMgmt.h"
+#include "socket.h"
 
 int enableExternalMessages = FALSE;
 static int debugListenFd;
@@ -36,7 +37,7 @@ void reconnDebugPrint(const char *fmt, ...)
     va_end(ap);
     if ((theDebugSocketFd != -1) && (enableExternalMessages == TRUE))
     {
-        sendSocket(theDebugSocketFd, theBuf, strlen((char *)theBuf), 0);
+        sendSocket(theDebugSocketFd, (unsigned char *)theBuf, strlen((char *)theBuf), 0);
     }
     else
     {
@@ -73,7 +74,7 @@ static char * getInput(int theDebugSocketFd)
         FD_SET(theDebugSocketFd, &debugFdSet);
         if(select(theDebugSocketFd+1, &debugFdSet, NULL, NULL, &timeout) <= 0)
         {
-            sendSocket(theDebugSocketFd, DEBUG_TIMEOUT_MESSAGE, strlen(DEBUG_TIMEOUT_MESSAGE), 0);
+            sendSocket(theDebugSocketFd, (unsigned char *)DEBUG_TIMEOUT_MESSAGE, strlen(DEBUG_TIMEOUT_MESSAGE), 0);
 
             close(theDebugSocketFd);
             theDebugSocketFd = -1;
@@ -150,10 +151,11 @@ void *debugMenuTask(void *argument)
     fd_set debugFdSet;
     struct timeval timeout;
     struct TableEntry_t *tableEntry = NULL;
-    struct TableEntry_t *activeTableEntry = NULL, *tmpItem;
+    struct TableEntry_t *activeTableEntry = NULL;
     char echo_off[] = { (char)IAC, (char) WILL, (char) TELOPT_ECHO, (char) 0 };
     char echo_on[] = { (char)IAC, (char) WONT, (char) TELOPT_ECHO, (char) TELOPT_NAOFFD, (char)TELOPT_NAOCRD, (char) 0 };
     
+    UNUSED_PARAM(argument);
     atexit(debugCleanUp);
     /* Create the incoming (server) socket */
     if((debugListenFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) 
@@ -197,12 +199,12 @@ void *debugMenuTask(void *argument)
             {
                 reconnDebugPrint("%s: newSocketFd = %d\r\n", __FUNCTION__, theDebugSocketFd);
                 
-                sendSocket(theDebugSocketFd, echo_off, strlen(echo_off), 0);
+                sendSocket(theDebugSocketFd, (unsigned char *)echo_off, strlen(echo_off), 0);
                 retCode = recv((int)theDebugSocketFd, &echoAnswer, DEBUG_INPUT_LEN, 0);
                 //
                 // Ask for password
                 //
-                sendSocket(theDebugSocketFd, DEBUG_QUESTION, strlen(DEBUG_QUESTION), 0);
+                sendSocket(theDebugSocketFd, (unsigned char *)DEBUG_QUESTION, strlen(DEBUG_QUESTION), 0);
                 memset(buff, 0, DEBUG_INPUT_LEN);
 
                 timeout.tv_sec = 30;
@@ -212,7 +214,7 @@ void *debugMenuTask(void *argument)
                 FD_SET(theDebugSocketFd, &debugFdSet);
                 if(select(theDebugSocketFd+1, &debugFdSet, NULL, NULL, &timeout) <= 0)
                 {
-                    sendSocket(theDebugSocketFd, DEBUG_TIMEOUT_MESSAGE, strlen(DEBUG_TIMEOUT_MESSAGE), 0);
+                    sendSocket(theDebugSocketFd, (unsigned char *)DEBUG_TIMEOUT_MESSAGE, strlen(DEBUG_TIMEOUT_MESSAGE), 0);
                     close(theDebugSocketFd);
                     theDebugSocketFd = -1;
                     continue;
@@ -224,7 +226,7 @@ void *debugMenuTask(void *argument)
                     theDebugSocketFd = -1;
                     continue;
                 }
-                sendSocket(theDebugSocketFd, echo_on, strlen(echo_on), 0);
+                sendSocket(theDebugSocketFd, (unsigned char *)echo_on, strlen(echo_on), 0);
                 retCode = recv((int)theDebugSocketFd, &echoAnswer, DEBUG_INPUT_LEN, 0);
 
                 if(strcmp(DEBUG_PASSWORD, buff) == 0)
@@ -233,7 +235,7 @@ void *debugMenuTask(void *argument)
                     while(connected)
                     {
                         needHelp = 1;
-                        sendSocket(theDebugSocketFd, &debugPrompt, strlen(debugPrompt), 0);
+                        sendSocket(theDebugSocketFd, (unsigned char *)&debugPrompt, strlen(debugPrompt), 0);
                         if((inputString = getInput(theDebugSocketFd)) != 0)
                         
                         {
@@ -259,12 +261,12 @@ void *debugMenuTask(void *argument)
                                         if(activeTableEntry->theMenu[i].func(theDebugSocketFd) != RECONN_SUCCESS)
                                         {
                                             char *p;
-                                            if(p = malloc(strlen(activeTableEntry->theMenu[i].commandName + 10)))
+                                            if((p = malloc(strlen(activeTableEntry->theMenu[i].commandName + 10))))
                                             {
                                                 memset(p , 0, strlen(activeTableEntry->theMenu[i].commandName + 10));
                                                 strcat(p, activeTableEntry->theMenu[i].commandName);
                                                 strcat(p, " Failed\n");
-                                                sendSocket(theDebugSocketFd, p, strlen(p), 0);
+                                                sendSocket(theDebugSocketFd, (unsigned char *)p, strlen(p), 0);
                                                 free (p);
                                             }
                                         }
@@ -313,47 +315,47 @@ void *debugMenuTask(void *argument)
                                         tableEntry = debugMenusTable->aMenuEntry;
                                     }
                                     sprintf((char *) outbuff, "\n\n%-25s%-25s\n", "Command", "Help");
-                                    sendSocket(theDebugSocketFd, &outbuff, strlen(outbuff), 0);
+                                    sendSocket(theDebugSocketFd, (unsigned char *)&outbuff, strlen(outbuff), 0);
                                     sprintf((char *) outbuff, "=====================================\n");
-                                    sendSocket(theDebugSocketFd, &outbuff, strlen(outbuff), 0);
+                                    sendSocket(theDebugSocketFd, (unsigned char *)&outbuff, strlen(outbuff), 0);
                                     while(tableEntry)
                                     {
                                         if(tableEntry->theMenu->subSystemName)
                                         {
                                             sprintf((char *) outbuff, "%-25s", tableEntry->theMenu->subSystemName);
-                                            sendSocket(theDebugSocketFd, &outbuff, strlen(outbuff), 0);
+                                            sendSocket(theDebugSocketFd, (unsigned char *)&outbuff, strlen(outbuff), 0);
                                         }
                                         if(tableEntry->theMenu->subSystemHelp)
                                         {
                                             sprintf((char *) outbuff, "%-25s\n", tableEntry->theMenu->subSystemHelp);
-                                            sendSocket(theDebugSocketFd, &outbuff, strlen(outbuff), 0);
+                                            sendSocket(theDebugSocketFd, (unsigned char *)&outbuff, strlen(outbuff), 0);
                                         }
                                         tableEntry = tableEntry->nextTableEntry;
                                     }
                                     sprintf((char *) outbuff, "%-25s%-25s\n", "quit", "Exit debug mode");
-                                    sendSocket(theDebugSocketFd, &outbuff, strlen(outbuff), 0);
+                                    sendSocket(theDebugSocketFd, (unsigned char *)&outbuff, strlen(outbuff), 0);
                                 }
                                 else
                                 {
                                     sprintf((char *) outbuff, "\n\n%-25s%-25s\n", "Command", "Help");
-                                    sendSocket(theDebugSocketFd, &outbuff, strlen(outbuff), 0);
+                                    sendSocket(theDebugSocketFd, (unsigned char *)&outbuff, strlen(outbuff), 0);
                                     sprintf((char *) outbuff, "=====================================\n");
-                                    sendSocket(theDebugSocketFd, &outbuff, strlen(outbuff), 0);
+                                    sendSocket(theDebugSocketFd, (unsigned char *)&outbuff, strlen(outbuff), 0);
                                     for(i = 0; i < activeTableEntry->numMenuItems; i++)
                                     {
                                         if(activeTableEntry->theMenu[i].commandName)
                                         {
                                             sprintf((char *) outbuff, "%-25s", activeTableEntry->theMenu[i].commandName);
-                                            sendSocket(theDebugSocketFd, &outbuff, strlen(outbuff), 0);
+                                            sendSocket(theDebugSocketFd, (unsigned char *)&outbuff, strlen(outbuff), 0);
                                         }
                                         if(activeTableEntry->theMenu[i].commandHelp)
                                         {
                                             sprintf((char *) outbuff, "%-25s\n", activeTableEntry->theMenu[i].commandHelp);
-                                            sendSocket(theDebugSocketFd, &outbuff, strlen(outbuff), 0);
+                                            sendSocket(theDebugSocketFd, (unsigned char *)&outbuff, strlen(outbuff), 0);
                                         }
                                     }
                                     sprintf((char *) outbuff, "%-25s%-25s\n", "quit", "go back to main menu\n");
-                                    sendSocket(theDebugSocketFd, &outbuff, strlen(outbuff), 0);
+                                    sendSocket(theDebugSocketFd, (unsigned char *)&outbuff, strlen(outbuff), 0);
                                 }
                             }
                         }
@@ -365,11 +367,11 @@ void *debugMenuTask(void *argument)
                 }
                 else
                 {
-                    sendSocket((int )theDebugSocketFd, "Invalid Password entered\n", 26, 0);
+                    sendSocket((int )theDebugSocketFd, (unsigned  char *)"Invalid Password entered\n", 26, 0);
                     if(close(theDebugSocketFd) != 0)
                     {
                         sprintf((char *) outbuff, "%s: close returned  =%d(%s) \n", __FUNCTION__, errno, strerror(errno));
-                        sendSocket(theDebugSocketFd, &outbuff, strlen(outbuff), 0);
+                        sendSocket(theDebugSocketFd, (unsigned char *)&outbuff, strlen(outbuff), 0);
                     }
                 }
             }

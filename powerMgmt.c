@@ -66,6 +66,7 @@
 #include "powerMgmt.h"
 #include "gpio.h"
 #include "fuel_gauge.h"
+#include "debugMenu.h"
 
 // counters to keep track of when a piece of equipment should go into power conservation 
 // mode. I.E. powered down

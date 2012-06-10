@@ -64,6 +64,7 @@
 #include "reconn.h"
 #include "gpio.h"
 #include "gps.h"
+#include "debugMenu.h"
 
 int myGpsFd;
 struct termios gpsSerial;

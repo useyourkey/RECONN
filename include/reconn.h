@@ -72,7 +72,6 @@
 #define RECONN_PAYLOAD_SIZE 50
 #define RECONN_RSP_PAYLOAD_SIZE 2048
 
-
 //#define DEBUG_EQPT
 //#define DEBUG_SPECTRUM
 //#define SOCKET_MUTEX

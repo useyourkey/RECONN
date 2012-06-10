@@ -61,6 +61,7 @@
 #include "reconn.h"
 #include "dmm.h"
 #include "gpio.h"
+#include "debugMenu.h"
 
 int myDmmFd;
 struct termios dmm_serial;
