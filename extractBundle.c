@@ -67,6 +67,7 @@
 #include <sys/stat.h>
 #include "reconn.h"
 #include "upgrade.h"
+#include "debugMenu.h"
 
 ReconnErrCodes extractBundle()
 {

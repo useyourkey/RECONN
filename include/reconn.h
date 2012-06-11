@@ -72,8 +72,12 @@
 #define RECONN_PAYLOAD_SIZE 50
 #define RECONN_RSP_PAYLOAD_SIZE 2048
 
+<<<<<<< HEAD
 
 #define DEBUG_EQPT
+=======
+//#define DEBUG_EQPT
+>>>>>>> 7500e683f90f32b2c1d47676ef916710fab01106
 //#define DEBUG_SPECTRUM
 //#define SOCKET_MUTEX
 #define DEBUG_CONNECT
@@ -152,10 +156,8 @@ typedef enum
 typedef enum
 {
     LNB_POWER_SET_REQ =         0x0600,
-    LNB_IDLE_CONFIG_REQ =       0x0601,
-    LNB_PKT_SEND_REQ =          0x0602,
-    LNB_PKT_RCV_NOTIFICATION =  0x0603,
-    LNB_BUILTINTEST_REQ =       0x0604
+    LNB_SA_10MHZ =              0x0601,
+    LNB_10MHZ =                 0x0602
 }LnbCommands;
 
 typedef enum 

@@ -55,6 +55,8 @@
 #include <stdarg.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <unistd.h>
+#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
@@ -65,6 +67,7 @@
 #include <dirent.h>
 
 #include "libiphoned.h"
+#include "reconn.h"
 
 //#define LIBIPHONED_DEBUG
 
@@ -118,12 +121,12 @@ static iphoned_monitor_state_t iphoned_monitor_state;
 
 static void startiphoned(void);
 static void processmsg(unsigned char *msgbuf, int len);
-static void process_msg_report_iphone_presence(unsigned char *buf, int len);
+static void process_msg_report_iphone_presence(unsigned char *buf);
 static void process_msg_report_data(unsigned char *buf, int len);
 static void stopiphoned(void);
 static void processrx(unsigned char *inbuf, int len);
 static int getpidof(char const *process);
-static int send_sock_msg(unsigned char cmdid, unsigned char *outbuf, int len);
+//static int send_sock_msg(unsigned char cmdid, unsigned char *outbuf, int len);
 static void stop_iphoned_monitor(void);
 static int start_iphoned_monitor(void);
 void *iphoned_monitor_thread(void *ptr);
@@ -154,9 +157,8 @@ static void libiphoned_log(const char *fmt, ...) {
  * and calls the callback if it is assigned.
  *
  * @param buf:  pointer to buffer containing message
- * @param len:  length of message
  */
-static void process_msg_report_iphone_presence(unsigned char *buf, int len) {
+static void process_msg_report_iphone_presence(unsigned char *buf) {
 	static int lastpresence = -1;
 	int presence = buf[1];
 
@@ -198,7 +200,7 @@ static void process_msg_report_data(unsigned char *buf, int len) {
 static void processmsg(unsigned char *msgbuf, int len) {
 	switch (msgbuf[0]) {
 	case MSG_REPORT_IPHONE_PRESENCE:
-		process_msg_report_iphone_presence(msgbuf, len);
+		process_msg_report_iphone_presence(msgbuf);
 		break;
 	case MSG_REPORT_DATA:
 		process_msg_report_data(msgbuf, len);
@@ -289,6 +291,7 @@ static void processrx(unsigned char *inbuf, int len) {
  * @param ptr:  purposeless pointer to comply with expected pthread function prototype
  */
 void *iphoned_start_service(void *ptr) {
+        UNUSED_PARAM(ptr);
 	system(iphoned_name);
 	return 0;
 }
@@ -310,11 +313,12 @@ void *iphoned_start_service(void *ptr) {
  */
 void *iphoned_monitor_thread(void *ptr) {
 	int res;
+        static int *state = 0;
 	unsigned char rxbuf[1024];
-	static int state = 0;
 	fd_set clientfdset;
 	struct timeval timeout;
 
+        UNUSED_PARAM(ptr);
 	iphoned_monitor_state = START;
 	monitorthreadrunning = TRUE;
 	while (1) {
@@ -379,6 +383,7 @@ void *iphoned_monitor_thread(void *ptr) {
 		}
 	}
 	monitorthreadrunning = FALSE;
+        return state;
 }
 
 /**
@@ -431,7 +436,6 @@ static void startiphoned(void) {
  * @return 0 if connected, -1 if not connected
  */
 static int connect_to_iphoned(void) {
-	int iphoned_socket;
 	int iphoned_port;
 	int flags;
 	struct sockaddr_in iphoned_ip_addr;
@@ -504,6 +508,7 @@ static void stopiphoned(void) {
  *
  * @return TRUE if iphoned socket is currently active.  FALSE otherwise.
  */
+#if 0
 static int send_sock_msg(unsigned char cmdid, unsigned char *outbuf, int len) {
 	unsigned char *buf;
 	int i = 0;
@@ -544,6 +549,7 @@ static int send_sock_msg(unsigned char cmdid, unsigned char *outbuf, int len) {
 	}
 	return -1;
 }
+#endif
 
 /**
  * finds PID of running process matching name
@@ -595,7 +601,7 @@ static int getpidof(char const *process) {
 			if (fd >= 0) {
 				read(fd, buf, 200);
 				close(fd);
-				sscanf(buf, "%s%s", trash, procname);
+				sscanf((char *)buf, "%s%s", trash, procname);
 				if (strcmp(procname, process) == 0) {
 					closedir(dp);
 					retval = atoi(entry->d_name);
@@ -690,7 +696,7 @@ int libiphoned_stop(void) {
  */
 int libiphoned_tx(unsigned char *buf, unsigned int len) {
 #ifdef __SIMULATION__
-	int i;
+	unsigned int i;
 	for(i = 0; i < len; i++)
 	{
 		printf("0x%x ", buf[i]);

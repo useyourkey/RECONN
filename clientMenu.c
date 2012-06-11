@@ -1,13 +1,21 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 #include <stdlib.h>
 
 #include "debugMenu.h"
 #include "reconn.h"
+<<<<<<< HEAD
 #include "eqptResponse.h"
 #include "socket.h"
 #include "upgrade.h"
+=======
+#include "clientApp.h"
+#include "socket.h"
+#include "upgrade.h"
+#include "eqptResponse.h"
+>>>>>>> 7500e683f90f32b2c1d47676ef916710fab01106
 
 
 extern void reconnMasterIphone();
@@ -63,7 +71,7 @@ static int clientMode()
 
     ADD_MSGID_TO_PACKET(CLIENT_ACCESS_REQ, thePacketPtr);
     ADD_DATA_LENGTH_TO_PACKET(0, thePacketPtr);
-    insertedMasterRead(&thePacket, 4);
+    insertedMasterRead((unsigned char *)&thePacket, 4);
     return RECONN_SUCCESS;
 }
 
@@ -74,7 +82,7 @@ static int masterMode()
 
     ADD_MSGID_TO_PACKET(MASTER_MODE_REQ, thePacketPtr);
     ADD_DATA_LENGTH_TO_PACKET(0, thePacketPtr);
-    insertedMasterRead(&thePacket, 4);
+    insertedMasterRead((unsigned char *)&thePacket, 4);
     return RECONN_SUCCESS;
 }
 #endif

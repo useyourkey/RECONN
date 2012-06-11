@@ -58,6 +58,7 @@
 
 #include "reconn.h"
 #include "gpio.h"
+#include "debugMenu.h"
 
 typedef enum
 {

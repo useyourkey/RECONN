@@ -58,19 +58,25 @@
 #include <stdio.h>
 #include <string.h>
 #include <pthread.h>
+#include <unistd.h>
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+
 #include <mqueue.h>
 #include <errno.h>
 
 #include "reconn.h"
 #include "socket.h"
 #include "eqptResponse.h"
+#include "debugMenu.h"
 
 
 
 #ifdef SOCKET_MUTEX
 extern pthread_mutex_t socketMutex;
 #endif
+extern int libiphoned_tx(unsigned char *, unsigned int);
 static struct mq_attr eqptMsgQattr;
 static int socketIdList[RECONN_MAX_NUM_CLIENTS];
 static char eqptMsgBuf[RECONN_RSP_PAYLOAD_SIZE];
@@ -190,8 +196,10 @@ static void reconnEqptCleanUp()
 void *reconnEqptTask(void *args)
 {
     int msgSize, i;
+    static int state = 0;
     int bytesSent;
 
+    UNUSED_PARAM(args);
     reconnDebugPrint("%s: ***** Started\n", __FUNCTION__);
     for(i = 0 ;i < RECONN_MAX_NUM_CLIENTS; i++)
     {
@@ -256,7 +264,7 @@ void *reconnEqptTask(void *args)
         }
     }
     reconnDebugPrint("%s: ********** returning. Should not happen\n", __FUNCTION__);
-    return 1;
+    return &state;
 }
 
 void reconnGetEqptResponse(int theEqptFd, int theMsgId, int mySocketFd, ReconnMasterClientMode mode)

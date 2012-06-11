@@ -4,6 +4,7 @@
 
 #include "debugMenu.h"
 #include "reconn.h"
+#include "socket.h"
 
 static int on = FALSE;
 static int external();
@@ -19,7 +20,8 @@ void registerSystemDebugMenu()
 {
     registerDebugCommand(&systemDebugMenu[0], sizeof(systemDebugMenu)/sizeof(debugMenuStruct));
 }
-static int external(theSocketFd)
+
+static int external(int theSocketFd)
 {
     char *theMessage;
     if(on == TRUE)
@@ -32,6 +34,6 @@ static int external(theSocketFd)
         theMessage = "Enabling console messages to this port\n";
         on = enableExternalMessages = TRUE;
     }
-    sendSocket(theSocketFd, theMessage, strlen(theMessage), 0);
+    sendSocket(theSocketFd, (unsigned char *)&theMessage, strlen(theMessage), 0);
     return RECONN_SUCCESS;
 }

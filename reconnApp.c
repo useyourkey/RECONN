@@ -81,6 +81,7 @@
 #include "gpio.h"
 #include "debugMenu.h"
 #include "upgrade.h"
+#include "fuel_gauge.h"
 
 #define COMM_DEBUG
 
@@ -105,6 +106,9 @@ extern int masterClientSocketFd;
 extern void insertedMasterRead();
 extern int insertedMasterSocketFd;
 extern void *insertedMasterTransmitTask();
+extern void registerClientDebugMenu();
+extern void registerFuelGaugeDebugMenu();
+extern void registerSystemDebugMenu();
 
 static void reconnCleanUp()
 {
@@ -120,6 +124,7 @@ static void *upgradeCheckTask(void *args)
     reconnDebugPrint("%s:****** Task Started\n", __FUNCTION__);
     sleep(20);
 
+    UNUSED_PARAM(args);
     system("killall powerLedFlash");
     reconnGpioAction(POWER_LED_GPIO, ENABLE);
     reconnDebugPrint("%s:****** Removing %s\n", __FUNCTION__, UPGRADE_INPROGRESS_FILE_NAME);
@@ -194,7 +199,7 @@ static short reconnGetFreeClientIndex()
         // The 0th element is reserved for the inserted iphone master
         for (i = 1; i < RECONN_MAX_NUM_CLIENTS; i++)
         {
-            if(reconnThreadIds[RECONN_NUM_SYS_TASKS + i] == -1)
+            if(reconnThreadIds[RECONN_NUM_SYS_TASKS + i] == (pthread_t)-1)
                 break;
         }
         retCode = i;
@@ -227,10 +232,12 @@ extern void initReconnCrashHandlers(void);
 
 void reconnMasterIphone()
 {
-    ReconnClientIndex index;
     pthread_t task;
     struct timespec wait_time;
     struct sockaddr_in masterTransmitAddr;
+#ifdef __SIMULATION__
+    int simulate_isiphonepresent();
+#endif
 
     reconnDebugPrint("%s: Function Entered\n", __FUNCTION__);
 #ifdef __SIMULATION__
@@ -339,9 +346,10 @@ int main(int argc, char **argv)
     struct sockaddr_in server_addr, client_addr;
     struct stat statInfo;
     struct sigaction act;
-    pthread_attr_t attr;
     int optval = 1;
 
+    UNUSED_PARAM(argc);
+    UNUSED_PARAM(argv);
     memset(&modeAndEqptDescriptors, 0, sizeof(ReconnModeAndEqptDescriptors));
 
 #ifndef __SIMULATION__

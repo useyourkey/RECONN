@@ -63,6 +63,7 @@
 
 #include "reconn.h"
 #include "socket.h"
+#include "debugMenu.h"
 
 
 int numberOfOpenSocket = 0;
@@ -70,6 +71,8 @@ int numberOfOpenSocket = 0;
 pthread_mutex_t socketMutex = PTHREAD_MUTEX_INITIALIZER;
 #endif
 int socketIdList[RECONN_MAX_NUM_CLIENTS];
+extern int libiphoned_tx(unsigned char *, unsigned int);
+
 
 void sendSocket(int socket_fd, unsigned char * buffer_s, int length, int num)
 {
