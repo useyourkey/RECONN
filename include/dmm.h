@@ -56,15 +56,23 @@
 #ifndef __DMM_H
 #define __DMM_H
 
-#define DMM_SERIAL_PORT          "/dev/ttyS0"
-#define DMM_BAUD_RATE            B9600
-#define DMM_DATABITS             CS8
-#define DMM_STOPBITS             0
-#define DMM_PARITYON             0
-#define DMM_PARITY               0
+#ifdef __SIMULATION__
+#define DMM_SERIAL_PORT         "/dev/ttyS0"
+#else
+#define DMM_SERIAL_PORT         "/dev/ttyO0"
+#endif
+#define DMM_BAUD_RATE           B9600
+#define DMM_DATABITS            CS8
+#define DMM_STOPBITS            0
+#define DMM_PARITYON            0
+#define DMM_PARITY              0
+#define DMM_MAX_RESPONSE        5
+#define DMM_MAX_SHUTDOWN        "t9999\n"
+#define DMM_SHUTDOWN_RESP       "9999t"
 
 ReconnErrCodes dmmInit(int *);
 ReconnErrCodes dmmWrite(unsigned char *buffer, int length);
 ReconnErrCodes dmmRead(unsigned char *buffer, int *length);
 ReconnErrCodes makeDmmOutput(unsigned char *gps_outputbuffer, int *gps_outputlength);
+ReconnErrCodes dmmDiags(void);
 #endif /* __DMM_H */

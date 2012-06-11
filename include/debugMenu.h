@@ -86,4 +86,6 @@ typedef struct
 }debugMenusTableStruct_t;
 
 void *debugMenuTask(void *argument);
+void reconnDebugPrint(const char *fmt, ...);
+void registerDebugCommand(debugMenuStruct *, int);
 #endif

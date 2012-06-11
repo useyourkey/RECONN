@@ -73,7 +73,7 @@
 #define RECONN_RSP_PAYLOAD_SIZE 2048
 
 
-//#define DEBUG_EQPT
+#define DEBUG_EQPT
 //#define DEBUG_SPECTRUM
 //#define SOCKET_MUTEX
 #define DEBUG_CONNECT
@@ -146,7 +146,7 @@ typedef enum
     DMM_PKT_SEND_REQ =          0x0502,
     DMM_PKT_RCVD_NOTIFICATION = 0x0503,
     DMM_BUILTINTEST_REQ =       0x0504,
-    DMM_PORT_CONNECTION_REQ =   0x0504
+    DMM_PORT_CONNECTION_REQ =   0x0505
 }DigitalMultiMeterCommands;
 
 typedef enum

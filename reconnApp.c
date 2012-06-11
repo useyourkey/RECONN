@@ -448,6 +448,7 @@ int main(int argc, char **argv)
     registerClientDebugMenu();
     registerFuelGaugeDebugMenu();
     registerSystemDebugMenu();
+    registerDmmDebugMenu();
 
     if(pthread_create(&(reconnThreadIds[RECONN_MASTER_SOCKET_TASK]), NULL, insertedMasterTransmitTask, (void *)0) < 0)
     {

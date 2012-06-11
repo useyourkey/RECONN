@@ -1,21 +1,27 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include <stdlib.h>
 
 #include "debugMenu.h"
 #include "reconn.h"
+#include "eqptResponse.h"
+#include "socket.h"
+#include "upgrade.h"
 
-static int iPhoneInserted = -1;
 
 extern void reconnMasterIphone();
 extern int theDebugSocketFd;
+static int numberClients();
+static int upgrade();
 
+#ifdef __SIMULATION__
+static int iPhoneInserted = -1;
 static int iPhoneInsert();
 static int iPhoneExtract();
 static int clientMode();
 static int masterMode();
-static int numberClients();
-static int upgrade();
+#endif
 
 debugMenuStruct clientDebugMenu[] =
 {
@@ -50,7 +56,7 @@ static int iPhoneExtract()
     return RECONN_SUCCESS;
 }
 
-int clientMode()
+static int clientMode()
 {
     ReconnPacket thePacket;
     ReconnPacket *thePacketPtr = &thePacket;
@@ -61,7 +67,7 @@ int clientMode()
     return RECONN_SUCCESS;
 }
 
-int masterMode()
+static int masterMode()
 {
     ReconnPacket thePacket;
     ReconnPacket *thePacketPtr = &thePacket;
@@ -73,20 +79,17 @@ int masterMode()
 }
 #endif
 
-int numberClients()
+static int numberClients()
 {
     char outbuf[DEBUG_OUTPUT_LEN];
 
     memset((char *)&outbuf, 0, DEBUG_OUTPUT_LEN);
     sprintf((char *)&outbuf, "The number of active clients is  %d\r\n", reconnClientsRegistered());
-    if(send(theDebugSocketFd, outbuf, strlen(outbuf)) <= 0)
-    {
-        reconnDebugPrint("%s: send failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
-    }
+    sendSocket(theDebugSocketFd, (unsigned char *)&outbuf, strlen(outbuf), 0);
     return RECONN_SUCCESS;
 }
 
-int upgrade(void)
+static int upgrade(void)
 {
     char outbuf[DEBUG_OUTPUT_LEN];
     ReconnErrCodes retCode;
@@ -94,7 +97,7 @@ int upgrade(void)
     if(reconnClientsRegistered() > 0)
     {
         sprintf((char *)&outbuf, "Can't upgrade because there are %d active clients.\r\n", reconnClientsRegistered());
-        send(theDebugSocketFd, (char *)&outbuf, strlen((char *)&outbuf));
+        sendSocket(theDebugSocketFd, (unsigned char *)&outbuf, strlen((char *)&outbuf), 0);
     }
     else
     {
@@ -111,13 +114,13 @@ int upgrade(void)
                 case RECONN_UPGRADE_FILE_NOT_FOUND:
                 {
                     strcpy((char *)&outbuf, "UPGRADE ABORTED: upgrade file not found.\n");
-                    send(theDebugSocketFd, &outbuf, strlen(outbuf));
+                    sendSocket(theDebugSocketFd, (unsigned char *)&outbuf, strlen(outbuf), 0);
                     break;
                 }
                 case RECONN_UPGRADE_BAD_CHECKSUM:
                 {
                     strcpy((char *)&outbuf, "UPGRADE ABORTED: /tmp/upgradeBundle has an invalid checksum.\n");
-                    send(theDebugSocketFd, &outbuf, strlen(outbuf));
+                    sendSocket(theDebugSocketFd, (unsigned char *)&outbuf, strlen(outbuf), 0);
                     break;
                 }
                 default:
@@ -125,7 +128,7 @@ int upgrade(void)
                     strcpy((char *)&outbuf, "UPGRADE ABORTED: ");
                     strcat((char *)&outbuf, strerror(errno));
                     strcat((char *)&outbuf, "\n"); 
-                    send(theDebugSocketFd, &outbuf, strlen(outbuf));
+                    sendSocket(theDebugSocketFd, (unsigned char *)&outbuf, strlen(outbuf), 0);
                     break;
                 }
             }
@@ -134,7 +137,7 @@ int upgrade(void)
     return RECONN_SUCCESS;
 }
 #ifdef __SIMULATION__
-int simulate_isiphonepresent()
+static int simulate_isiphonepresent()
 {
     return iPhoneInserted;
 }

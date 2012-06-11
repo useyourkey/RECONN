@@ -2,8 +2,8 @@
 #CC=gcc
 
 INCDIR= ./include
-#CC=arm-none-linux-gnueabi-gcc
-CC= gcc -g -D __SIMULATION__
+CC=arm-none-linux-gnueabi-gcc
+#CC= gcc -g -D __SIMULATION__
 CFLAGS=-I$(INCDIR)
 
 LINTFLAGS:= -Wall -Wextra -Wformat 
@@ -17,7 +17,7 @@ HEADERS=powerMeter.h spectrum.h gps.h reconn.h socket.h dmm.h clientApp.h powerM
 H_DEPENDENCIES:=$(addprefix include/, $(HEADERS))
 
 # All object files listed here
-OBJ=reconnApp.o gps.o powerMeter.o spectrum.o dmm.o clientApp.o socket.o powerMgmt.o eqptResponse.o gpio.o  crashHandler.o debugMenu.o reconn_i2c.o fuelGauge.o extractBundle.o version.o libiphoned.o clientMenu.o  systemMenu.o fuelGaugeMenu.o
+OBJ=reconnApp.o gps.o powerMeter.o spectrum.o dmm.o clientApp.o socket.o powerMgmt.o eqptResponse.o gpio.o  crashHandler.o debugMenu.o reconn_i2c.o fuelGauge.o extractBundle.o version.o libiphoned.o clientMenu.o  systemMenu.o fuelGaugeMenu.o dmmMenu.o
 
 all: reconn-service
 reconnDaemon: powerDaemon.o

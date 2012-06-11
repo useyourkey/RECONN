@@ -9,6 +9,7 @@
 extern ReconnErrCodes reconnEqptAddMsgToQ(const char *, int);
 extern ReconnErrCodes reconnDeRegisterClientApp(short);
 extern ReconnErrCodes reconnRegisterClientApp(short, int);
+extern int reconnClientsRegistered();
 extern void *reconnEqptTask(void *);
 
 #endif

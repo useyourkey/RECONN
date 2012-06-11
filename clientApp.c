@@ -644,7 +644,6 @@ void *reconnClientTask(void *args)
                             break;
                         }
                         case DMM_IDLE_CFG_REQ:
-                        case DMM_BUILTINTEST_REQ:
                         {
                             // communicate with the device. So, send it a status command and get the response.
 
@@ -667,6 +666,15 @@ void *reconnClientTask(void *args)
                                 theEqptFd = pModeAndEqptDescriptors->dmmFd;
                                 responseNeeded = TRUE;
                             }
+                            resetPowerStandbyCounter(RESET_DMM_STBY_COUNTER);
+                            break;
+                        }
+                        case DMM_BUILTINTEST_REQ:
+                        {
+                            reconnDebugPrint("%s: Received DMM_BUILTINTEST_REQ\n", __FUNCTION__);
+                            sendReconnResponse (mySocketFd, thePacket.messageId.Byte[0], 
+                                    thePacket.messageId.Byte[1], dmmDiags(), myMode); 
+
                             resetPowerStandbyCounter(RESET_DMM_STBY_COUNTER);
                             break;
                         }

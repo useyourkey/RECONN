@@ -363,7 +363,7 @@ void reconnGetEqptResponse(int theEqptFd, int theMsgId, int mySocketFd, ReconnMa
                        libiphoned_tx((unsigned char *)thePacketPtr, payloadIndex + 6);
                    }
 #ifdef DEBUG_EQPT
-                    reconnDebugPrint("%s: Calling reconnEqptAddMsgToQ %d \n", __FUNCTION__,  payloadIndex + 6);
+                   reconnDebugPrint("%s: Calling reconnEqptAddMsgToQ %d \n", __FUNCTION__,  payloadIndex + 6);
 #endif
                    reconnEqptAddMsgToQ((char *)thePacketPtr, payloadIndex + 6);
                 }
