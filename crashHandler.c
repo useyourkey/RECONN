@@ -183,6 +183,9 @@ void crashHandler(int signo, siginfo_t *sigInfo, void *ptr)
         case SIGFPE:
             sprintf(sigdesc, "Invalid Arithmetic Operation (SIGFPE #%d)\n", signo);
             break;
+        case SIGPIPE:
+            sprintf(sigdesc, "Broken Pipe \n");
+            break;
         default:
             sprintf(sigdesc, "%.60s (signal #%d)\n", strsignal(signo), signo);
             break;

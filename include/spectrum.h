@@ -56,6 +56,15 @@
 #ifndef __SPECTRUM_H
 #define __SPECTRUM_H
 
+#define SPECTRUM_ANALYZER_DEV       "/dev/AvcomAnalyzer"
+#define SPECTRUM_ANALYZER_BAUD_RATE B460800
+#define SPECTRUM_ANALYZER_DATABITS  CS8
+#define SPECTRUM_ANALYZER_STOPBITS  0
+#define SPECTRUM_ANALYZER_PARITYON  0
+#define SPECTRUM_ANALYZER_PARITY    0
+#define INVALID_COMMAND "Invalid SA Command\r\n\0"
+
+
 ReconnErrCodes SpectrumAnalyzerInit(int *);
 ReconnErrCodes SpectrumAnalyzerWrite(unsigned char *buffer, int length);
 ReconnErrCodes SpectrumAnalyzerRead(unsigned char *buffer, int *length);

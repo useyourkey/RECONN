@@ -185,13 +185,13 @@ ReconnErrCodes reconnGpioAction(GpioNames theGpio, GpioAction theAction)
                 fputc((theAction == ENABLE) ? '1':'0', gpioFd);
                 if((theGpioValue = fgetc(gpioFd)) == EOF)
                 {
-                    reconnDebugPrint("%s: fgetc() failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+                    reconnDebugPrint("%s, %d: fgetc() for %s failed %d(%s)\n", __FUNCTION__, __LINE__, gpioPathPtr, errno, strerror(errno));
                     retCode = RECONN_FAILURE;
                 }
                 else
                 {
 #ifdef DEBUG_GPIO
-                    reconnDebugPrint("%s: fgetc() returned %d\n", __FUNCTION__, (char)theGpioValue);
+                    reconnDebugPrint("%s, %d: fgetc() returned %d\n", __FUNCTION__, __LINE__, (char)theGpioValue);
 #endif
                 }
                 fclose(gpioFd);

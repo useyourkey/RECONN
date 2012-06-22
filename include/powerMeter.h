@@ -56,8 +56,7 @@
 #ifndef __POWERMETER_H
 #define __POWERMETER_H
 
-#define POWER_METER_DEV      "/dev/ttyUSB1"
-//#define POWER_METER_DEV      "/dev/ttyUSB0"
+#define POWER_METER_DEV      "/dev/AvcomMeter"
 #define POWER_METER_BAUD        B115200
 #define POWER_METER_DATABITS    CS8
 #define POWER_METER_STOPBITS    0
@@ -70,10 +69,13 @@
 #define POWER_METER_PARITY      0
 #define POWER_METER_COMMAND     "H\r"
 
+#define POWER_METER_SCAN_SLEEP 1
+
 ReconnErrCodes powerMeterInit(int *);
 ReconnErrCodes powerMeterWrite(unsigned char *buffer, int length);
 ReconnErrCodes powerMeterRead(unsigned char *buffer, int *length);
 int pm_command_processing(unsigned char *command, int length, unsigned char *buffer,
 		int *outlength);
 int makePowerMeterOutput(unsigned char *pm_outputbuffer, int *pm_outputlength);
+extern void *powerMeterPresenceTask(void *args);
 #endif /* __POWERMETER_H */

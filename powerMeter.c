@@ -59,18 +59,20 @@
 #include <fcntl.h>
 #include <sys/signal.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <string.h>
 
 #include "reconn.h"
 #include "powerMeter.h"
 #include "gpio.h"
 #include "debugMenu.h"
+#include "socket.h"
 
 int myMeterFd;
 struct termios meterSerial;
 
 int pm_wait_flag = TRUE;
-int PowerMeterPortInit = FALSE;
+static int PowerMeterPortInit = FALSE;
 
 static ReconnErrCodes powerMeterOpen(int *fileDescriptor) 
 {
@@ -118,6 +120,7 @@ static ReconnErrCodes powerMeterOpen(int *fileDescriptor)
         }
         else
         {
+            printf("%s: power meter responded length = %d (%s)\n", __FUNCTION__, dataLength, meterData);
             retCode = RECONN_FAILURE;
         }
     }
@@ -174,4 +177,110 @@ ReconnErrCodes powerMeterRead(unsigned char *buffer, int *length)
         }
     }
     return (retCode);
+}
+//******************************************************************************
+//****************************************************************************** //
+// FUNCTION:        powerMeterPresenceTask
+//
+// DESCRIPTION: This functions sole purpose is to detect the insertion or extraction
+//              of the power meter then notify the master client of the event. 
+//
+//******************************************************************************
+void *powerMeterPresenceTask(void *args)
+{
+    static int status = 0;
+    struct stat theStatus;
+    int insertMessageSent = FALSE;
+    int extractMessageSent = FALSE;
+    int meterInserted = FALSE;
+    extern int masterClientSocketFd;
+    extern int insertedMasterSocketFd;
+    extern ReconnModeAndEqptDescriptors modeAndEqptDescriptors;
+
+    UNUSED_PARAM(args);
+
+    reconnDebugPrint("%s: ***** Started\n", __FUNCTION__);
+    while(1)
+    {
+        /*
+         * If there is a master client connected check the power meter status.
+         */
+        if((masterClientSocketFd != -1)  || (insertedMasterSocketFd != -1))
+        {
+            if(stat(POWER_METER_DEV, &theStatus) < 0)
+            {
+                if(errno == ENOENT)
+                {
+                    if(meterInserted == TRUE)
+                    {
+                        // The meter has been extracted
+                        if(extractMessageSent == FALSE)
+                        {
+                            reconnDebugPrint("%s: Sending extract message\n", __FUNCTION__);
+                            modeAndEqptDescriptors.powerMeterFd = -1;
+                            PowerMeterPortInit = FALSE;
+                            if(insertedMasterSocketFd != -1)
+                            {
+                                sendReconnResponse(insertedMasterSocketFd, 
+                                        (PMETER_STATUS_NOTIF & 0xff00) >> 8,
+                                        (PMETER_STATUS_NOTIF & 0x00ff), 
+                                        0, INSERTEDMASTERMODE);
+                            }
+                            else
+                            {
+                                sendReconnResponse(masterClientSocketFd, 
+                                        (PMETER_STATUS_NOTIF & 0xff00) >> 8,
+                                        (PMETER_STATUS_NOTIF & 0x00ff), 
+                                        0, MASTERMODE);
+                            }
+                            extractMessageSent = TRUE;
+                            insertMessageSent = FALSE;
+                            meterInserted = FALSE;
+                        }
+                    }
+                }
+                else
+                {
+                    reconnDebugPrint("%s: stat(%s) failed %d (%s)\n", __FUNCTION__, POWER_METER_DEV, errno, strerror(errno));
+                }
+            }
+            else
+            {
+                /*
+                 * The meter is inserted. If a notification message has not 
+                 * been sent, send it.
+                 */
+                if(insertMessageSent == FALSE)
+                {
+                    if(powerMeterInit(&(modeAndEqptDescriptors.powerMeterFd)) == RECONN_SUCCESS)
+                    {
+                        reconnDebugPrint("%s: Sending insertion message\n", __FUNCTION__);
+                        if(insertedMasterSocketFd != -1)
+                        {
+                            sendReconnResponse(insertedMasterSocketFd, 
+                                    (PMETER_STATUS_NOTIF & 0xff00) >> 8,
+                                    (PMETER_STATUS_NOTIF & 0x00ff), 
+                                    1, INSERTEDMASTERMODE);
+                        }
+                        else
+                        {
+                            sendReconnResponse(masterClientSocketFd, 
+                                    (PMETER_STATUS_NOTIF & 0xff00) >> 8,
+                                    (PMETER_STATUS_NOTIF & 0x00ff), 
+                                    1, MASTERMODE);
+                        }
+                        insertMessageSent = TRUE;
+                        extractMessageSent = FALSE;
+                        meterInserted = TRUE;
+                    }
+                    else
+                    {
+                        reconnDebugPrint("%s: something inserted that is not a power meter\n", __FUNCTION__);
+                    }
+                }
+            }
+        }
+        sleep(POWER_METER_SCAN_SLEEP);
+    }
+    return(&status);
 }

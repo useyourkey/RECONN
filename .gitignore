@@ -3,3 +3,7 @@ cscope.*
 reconn-service
 tags
 version.c
+PowerDaemon
+createBundle
+reconnBundle
+

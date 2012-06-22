@@ -138,73 +138,6 @@ void *reconnPwrMgmtTask(void *argument)
 //******************************************************************************
 //******************************************************************************
 //
-// FUNCTION:    reconnPwrButtonTask()       
-//
-// DESCRIPTION: This task monitors the power button. When pressed, this task will detect
-//              that event and power down the system sequentially.
-//******************************************************************************
-void *reconnPwrButtonTask(void *argument)
-{
-#ifndef __SIMULATION__
-    FILE *powerButtonFd;
-    int theButtonValue;
-    int initialPowerUp = TRUE;
-#endif
-    static char retCode = '1';
-
-    (void) argument;  // quiet compiler
-
-    reconnDebugPrint("%s: **** Task Started\n", __FUNCTION__);
-    while(1)
-    {
-#ifndef __SIMULATION__
-        if((powerButtonFd = fopen(RECONN_POWER_BUTTON_GPIO_FILENAME, "r")) == NULL)
-        {
-            reconnDebugPrint("%s: fopen(RECONN_POWER_BUTTON_GPIO_FILENAME, r) failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
-        }
-        else if((theButtonValue = fgetc(powerButtonFd)) == EOF)
-        {
-            reconnDebugPrint("%s: fgetc(RECONN_POWER_BUTTON_GPIO_FILENAME) == EOF %d(%s)\n", __FUNCTION__, errno, strerror(errno));
-            fclose(powerButtonFd);
-        }
-        else
-        {
-            fclose(powerButtonFd);
-            // Upon initial power up, if the power button is depressed we keep checking until it is no 
-            // longer depressed. Then we monitor it to be pressed again at which time we turn the box off.
-            if((initialPowerUp == TRUE) && (atoi((char *)&theButtonValue) == POWER_BUTTON_PRESSED))
-            {
-                usleep(RECONN_CHECK_POWER_SWITCH);
-                continue;
-            }
-            initialPowerUp = FALSE;
-            if (atoi((char *)&theButtonValue) == POWER_BUTTON_PRESSED)
-            {
-                // Need to shutdown all power 
-                reconnGpioAction(GPIO_140, DISABLE);
-                reconnGpioAction(GPIO_141, DISABLE);
-                reconnGpioAction(GPIO_157, DISABLE);
-                reconnGpioAction(GPIO_161, DISABLE);
-                reconnGpioAction(GPIO_157, DISABLE);
-                // Turn off the power LED
-                reconnGpioAction(GPIO_172, DISABLE);
-                reconnGpioAction(GPIO_156, DISABLE); // releases the 5V power latch to the board.
-                break;
-            }
-        }
-        usleep(RECONN_CHECK_POWER_SWITCH);
-#else
-        reconnDebugPrint("%s: **** Task not running due to simulation\n", __FUNCTION__);
-        sleep(200000);
-#endif
-    }
-    return &retCode;
-}
-
-
-//******************************************************************************
-//******************************************************************************
-//
 // FUNCTION:    reconnBatteryMonTask()       
 //
 // DESCRIPTION: This task is responsible for monitoring the system's battery and
@@ -427,7 +360,7 @@ void *reconnBatteryMonTask(void *argument)
         fclose(dcPowerGpioFp);
     }
 #else
-    reconnDebugPrint("%s: **** Task does not run during simuation\n", __FUNCTION__);
+    reconnDebugPrint("%s: **** Task does not run during simulation\n", __FUNCTION__);
 #endif
     return &retCode;
 }

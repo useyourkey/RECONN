@@ -2,8 +2,8 @@
 #define __EQPTRSP__
 
 #define EQPT_MSG_Q_NAME     "/eqptRspQ"
-#define EPQT_MSG_Q_FLAGS    0
-#define EPQT_MSG_Q_SIZE     20
+#define EQPT_MSG_Q_FLAGS    0
+#define EQPT_MSG_Q_SIZE     20
 
 
 extern ReconnErrCodes reconnEqptAddMsgToQ(const char *, int);

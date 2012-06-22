@@ -4,7 +4,7 @@
 INCDIR= ./include
 CC=arm-none-linux-gnueabi-gcc
 #CC= gcc -g -D __SIMULATION__
-CFLAGS=-I$(INCDIR)
+CFLAGS=-I$(INCDIR) -rdynamic
 
 LINTFLAGS:= -Wall -Wextra -Wformat 
 #LINTFLAGS:= -Wall 
@@ -17,9 +17,10 @@ HEADERS=powerMeter.h spectrum.h gps.h reconn.h socket.h dmm.h clientApp.h powerM
 H_DEPENDENCIES:=$(addprefix include/, $(HEADERS))
 
 # All object files listed here
-OBJ=reconnApp.o gps.o powerMeter.o spectrum.o dmm.o clientApp.o socket.o powerMgmt.o eqptResponse.o gpio.o  crashHandler.o debugMenu.o reconn_i2c.o fuelGauge.o extractBundle.o version.o libiphoned.o clientMenu.o  systemMenu.o fuelGaugeMenu.o dmmMenu.o
+OBJ=reconnApp.o gps.o powerMeter.o spectrum.o dmm.o clientApp.o socket.o socketMenu.o powerMgmt.o eqptResponse.o gpio.o  crashHandler.o debugMenu.o reconn_i2c.o fuelGauge.o extractBundle.o version.o libiphoned.o clientMenu.o  systemMenu.o fuelGaugeMenu.o dmmMenu.o
 
-all: reconn-service
+all: reconn-service reconnDaemon
+
 reconnDaemon: powerDaemon.o
 
 # build all objects from all c files.
@@ -33,6 +34,7 @@ version.o: version.c
 
 powerDaemon.o: powerDaemon.c
 	$(CC) $^ -o PowerDaemon $(CFLAGS)
+	@cp PowerDaemon ../rootfs/fs/usr/bin
 
 reconn-service: $(OBJ)
 	$(CC) -o $@ $^ $(CFLAGS) $(LIBS)
@@ -43,7 +45,7 @@ reconn-service: $(OBJ)
 	@cscope -bkqu -i cscope.files 
 	@ctags *c include/*.h
 	@rm -f cscope.files
-	@cp reconn-service ../rootfs/skell/usr/bin
+	@cp reconn-service ../rootfs/fs/usr/bin
 
 createBundle: createBundle.c
 	gcc -g $< -o $@ $(CFLAGS) $(LINTFLAGS)

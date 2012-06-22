@@ -6,17 +6,10 @@
 
 #include "debugMenu.h"
 #include "reconn.h"
-<<<<<<< HEAD
-#include "eqptResponse.h"
-#include "socket.h"
-#include "upgrade.h"
-=======
 #include "clientApp.h"
 #include "socket.h"
 #include "upgrade.h"
 #include "eqptResponse.h"
->>>>>>> 7500e683f90f32b2c1d47676ef916710fab01106
-
 
 extern void reconnMasterIphone();
 extern int theDebugSocketFd;
@@ -145,7 +138,7 @@ static int upgrade(void)
     return RECONN_SUCCESS;
 }
 #ifdef __SIMULATION__
-static int simulate_isiphonepresent()
+int simulate_isiphonepresent()
 {
     return iPhoneInserted;
 }

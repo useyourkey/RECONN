@@ -65,6 +65,7 @@
 #include "socket.h"
 #include "debugMenu.h"
 
+extern short socketPrint;
 
 int numberOfOpenSocket = 0;
 #ifdef SOCKET_MUTEX
@@ -77,13 +78,16 @@ extern int libiphoned_tx(unsigned char *, unsigned int);
 void sendSocket(int socket_fd, unsigned char * buffer_s, int length, int num)
 {
     int errCode;
-#ifdef COMM_DEBUG
-    reconnDebugPrint("%s: ", __FUNCTION__);
-    for (i = 0; i < length; ++i) {
-        reconnDebugPrint("<%x>", (unsigned int) buffer_s[i]);
+    int i;
+
+    if(socketPrint == TRUE)
+    {
+        reconnDebugPrint("%s: ", __FUNCTION__);
+        for (i = 0; i < length; ++i) {
+            reconnDebugPrint("<%x>", (unsigned int) buffer_s[i]);
+        }
+        reconnDebugPrint("\n\n\n");
     }
-    reconnDebugPrint("\n\n\n");
-#endif
     errCode = send(socket_fd, buffer_s, length, num);
     if(errCode == -1)
     {

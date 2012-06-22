@@ -76,16 +76,6 @@
 #include "gpio.h"
 #include "debugMenu.h"
 
-#define SPECTRUM_ANALYZER_DEV       "/dev/ttyUSB0"
-#define SPECTRUM_ANALYZER_BAUD_RATE B460800
-#define SPECTRUM_ANALYZER_DATABITS  CS8
-#define SPECTRUM_ANALYZER_STOPBITS  0
-#define SPECTRUM_ANALYZER_PARITYON  0
-#define SPECTRUM_ANALYZER_PARITY    0
-
-
-#define INVALID_COMMAND "Invalid SA Command\r\n\0"
-
 int myAnalyzerFd;
 int SAPortInit = FALSE;
 struct termios analyzerSerial;

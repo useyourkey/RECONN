@@ -72,15 +72,10 @@
 #define RECONN_PAYLOAD_SIZE 50
 #define RECONN_RSP_PAYLOAD_SIZE 2048
 
-<<<<<<< HEAD
-
-#define DEBUG_EQPT
-=======
 //#define DEBUG_EQPT
->>>>>>> 7500e683f90f32b2c1d47676ef916710fab01106
 //#define DEBUG_SPECTRUM
 //#define SOCKET_MUTEX
-#define DEBUG_CONNECT
+//#define DEBUG_CONNECT
 //#define DEBUG_CLIENT
 //#define DEBUG_GPIO
 
@@ -93,13 +88,18 @@ typedef enum
     MASTER_MODE_SET_NOTIFICATION =      0x0004,
     MASTER_MODE_REMOVED_NOTIFICATION =  0x0005,
     MASTER_MODE_RESIGN_REQ =            0x0006,
-    MASTER_MODE_RESIGN_QUERY =          0x0007
+    MASTER_MODE_RESIGN_QUERY =          0x0007,
+    MASTER_MODE_RESIGN_RESP =           0x0008,
+    SLAVE_MODE_DISABLE_REQ =            0x0009,
+    SLAVE_MODE_ENABLE_REQ =             0x000a,
+    MASTER_LOST_NOTIFICATION =          0x000b,
+    SLAVES_SEND_MSG =                   0x000c
 }ConnectionManagmentCommands;
 
 typedef enum
 {
-    POWER_ON,
-    POWER_OFF
+    POWER_OFF,
+    POWER_ON
 }ReconnPower;
 
 typedef enum
@@ -111,9 +111,13 @@ typedef enum
     RECONN_ID_NOTIFICATION =        0x0105,
     RECONN_INIT_STATE_REQ =         0x0106,
     RECONN_INIT_STATE_SET_REQ =     0x0107,
-    RECONN_SW_VERSION_REQ =         0x0108,
     RECONN_DEVICE_DEBUGB_REQ =      0x0109,
-    RECONN_SW_VERSION_NOTIF =       0x010a
+    RECONN_SW_VERSION_REQ =         0x010a,
+    RECONN_IP_ADDRESS_REQ =         0x010b,
+    RECONN_IP_ADDRESS_NOTIF =       0x010c,
+    REMOTE_MONITOR_STATE_REQ =      0x010d,
+    REMOTE_MONITOR_ENABLE_REQ =     0x010e,
+    REMOTE_MONITOR_SET_REQ =        0x010f
 }ReconnStatus;
 
 typedef enum
@@ -140,7 +144,8 @@ typedef enum
     PMETER_IDLE_CFG_REQ =           0x0401,
     PMETER_PKT_SEND_REQ =           0x0402,
     PMETER_PKT_RCVD_NOTIFICATION =  0x0403,
-    PMETER_BUILTINTEST_REQ =        0x0404
+    PMETER_BUILTINTEST_REQ =        0x0404,
+    PMETER_STATUS_NOTIF =           0x0405
 }PowerMeterCommands;
 
 typedef enum
@@ -171,8 +176,10 @@ typedef enum
 
 typedef enum 
 {
-    BATTERY_LEVEL_REQ = 0x0800,
-    BATTERY_LEVEL_RSP = 0x08f0
+    BATTERY_LEVEL_REQ =             0x0800,
+    BATTERY_LEVEL_RSP =             0x08f0,
+    BATTERY_CHARGE_STATE_REQ =      0x0801,
+    BATTERY_CHARGE_STATE_RSP =      0x08f1
 }BatteryStatus;
 
 typedef enum 
@@ -221,11 +228,12 @@ typedef enum
 {
     RECONN_EQPT_TASK,
     RECONN_PWR_MGMT_TASK,
-    RECONN_PWR_BUTTON_TASK,
+    //RECONN_PWR_BUTTON_TASK,
     RECONN_BATTERY_MONITOR_TASK,
     RECONN_DEBUG_MENU_TASK,
     RECONN_UPGRADE_CHECK_TASK,
     RECONN_MASTER_SOCKET_TASK,
+    RECONN_POWER_METER_TASK,
     RECONN_NUM_SYS_TASKS
 }RECONN_TASKS;
 

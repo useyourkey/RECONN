@@ -1,4 +1,4 @@
-//******************************************************************************
+//*****************************************************************************
 //****************************************************************************** //
 // FILE:        eqptResponse.c
 //
@@ -155,7 +155,7 @@ ReconnErrCodes reconnEqptAddMsgToQ(const char *theMsgPtr, int theMsgSize)
 {
     ReconnErrCodes retCode = RECONN_SUCCESS;
 #ifdef DEBUG_EQPT
-    reconnDebugPrint("%s: calling mq_send with theMsgSize = %d\n", __FUNCTION__, theMsgSize);
+    reconnDebugPrint("%s: calling mq_send with theMsgSize = %d EqptMsgQid = %d\n", __FUNCTION__, theMsgSize, EqptMsgQid);
 #endif
     if(theMsgPtr == NULL)
     {
@@ -172,6 +172,9 @@ ReconnErrCodes reconnEqptAddMsgToQ(const char *theMsgPtr, int theMsgSize)
         reconnDebugPrint("\n\n******** %s: mq_send() failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
         retCode = RECONN_FAILURE;
     }
+#ifdef DEBUG_EQPT
+    reconnDebugPrint("%s: returning %d \n", __FUNCTION__, retCode);
+#endif
     return(retCode);
 }
 
@@ -197,7 +200,6 @@ void *reconnEqptTask(void *args)
 {
     int msgSize, i;
     static int state = 0;
-    int bytesSent;
 
     UNUSED_PARAM(args);
     reconnDebugPrint("%s: ***** Started\n", __FUNCTION__);
@@ -213,8 +215,8 @@ void *reconnEqptTask(void *args)
     }
     mq_unlink(EQPT_MSG_Q_NAME);
     memset((char*) &eqptMsgQattr, 0, sizeof(eqptMsgQattr));
-    eqptMsgQattr.mq_flags    = EPQT_MSG_Q_FLAGS;
-    eqptMsgQattr.mq_maxmsg   = EPQT_MSG_Q_SIZE;
+    eqptMsgQattr.mq_flags    = EQPT_MSG_Q_FLAGS;
+    eqptMsgQattr.mq_maxmsg   = EQPT_MSG_Q_SIZE;
     eqptMsgQattr.mq_msgsize  = RECONN_RSP_PAYLOAD_SIZE;
 
     EqptMsgQid = mq_open(EQPT_MSG_Q_NAME, O_RDWR | O_CREAT, NULL, NULL);
@@ -247,9 +249,8 @@ void *reconnEqptTask(void *args)
 #ifdef DEBUG_EQPT
                         reconnDebugPrint("%s: Sending message to client socket %d\n", __FUNCTION__, socketIdList[i]);
 #endif
-                        bytesSent = send(socketIdList[i], &eqptMsgBuf, msgSize, 0);
+                        sendSocket(socketIdList[i], &eqptMsgBuf, msgSize, 0);
 #ifdef DEBUG_EQPT
-                        reconnDebugPrint("%s: done sending %d bytes\n", __FUNCTION__, bytesSent);
 #endif
                     
                     } 
@@ -274,6 +275,7 @@ void reconnGetEqptResponse(int theEqptFd, int theMsgId, int mySocketFd, ReconnMa
 #ifdef DEBUG_EQPT
     int debugIndex;
     char *debugPtr;
+
 #endif
     struct timeval waitTime;
     struct stat FdStatus;
@@ -281,6 +283,8 @@ void reconnGetEqptResponse(int theEqptFd, int theMsgId, int mySocketFd, ReconnMa
     ReconnResponsePacket *thePacketPtr =&thePacket;
 
 
+    if(theEqptFd == -1)
+        return;
     FD_ZERO(&theFileDescriptor);
     FD_SET(theEqptFd, &theFileDescriptor);
 
@@ -288,6 +292,7 @@ void reconnGetEqptResponse(int theEqptFd, int theMsgId, int mySocketFd, ReconnMa
     waitTime.tv_usec = 200000;
 
 #ifdef DEBUG_EQPT
+    reconnDebugPrint("%s: Function Entered \n",__FUNCTION__);
     reconnDebugPrint("%s: Calling select for Fd %d \n",__FUNCTION__, theEqptFd);
 #endif
 
@@ -297,20 +302,14 @@ void reconnGetEqptResponse(int theEqptFd, int theMsgId, int mySocketFd, ReconnMa
     {
         if((retCode = select(theEqptFd+1, &theFileDescriptor, NULL, NULL, &waitTime)) < 0)
         {
-            if(retCode < 0)
-            {
-                sendReconnResponse (mySocketFd, thePacket.messageId.Byte[0],
-                        thePacket.messageId.Byte[1], RECONN_INVALID_MESSAGE, mode);
-                reconnDebugPrint("%s: select failed %d(%s)\n",__FUNCTION__, errno, strerror(errno));
-            }
+            reconnDebugPrint("%s: select failed %d(%s)\n",__FUNCTION__, errno, strerror(errno));
+            break;
         }
         else if(retCode == 0)
         {
 #ifdef DEBUG_EQPT
             reconnDebugPrint("%s: select timedout\n",__FUNCTION__);
 #endif
-            // see if it was a timeout. If it is then the equipment did not need to respond so
-            // simply return.
             break;
         }
         else if (retCode != 0)
@@ -353,27 +352,34 @@ void reconnGetEqptResponse(int theEqptFd, int theMsgId, int mySocketFd, ReconnMa
 #endif
                         payloadIndex += length;
                     }
-#ifdef DEBUG_EQPT
-                    debugPtr = (char *)&(thePacket.dataPayload[0]);
-                    for(debugIndex = 0; debugIndex < payloadIndex; debugIndex++, debugPtr++)
+                    if(payloadIndex)
                     {
-                        reconnDebugPrint("0x%x ", *debugPtr);
+#ifdef DEBUG_EQPT
+                        debugPtr = (char *)&(thePacket.dataPayload[0]);
+                        for(debugIndex = 0; debugIndex < payloadIndex; debugIndex++, debugPtr++)
+                        {
+                            reconnDebugPrint("0x%x ", *debugPtr);
+                        }
+                        reconnDebugPrint("\n");
+#endif
+                        ADD_DATA_LENGTH_TO_PACKET(payloadIndex, thePacketPtr);
+                        if(mode == INSERTEDMASTERMODE) 
+                        {
+#ifdef DEBUG_EQPT
+                            reconnDebugPrint("%s: Calling libiphoned_tx %d \n", __FUNCTION__,  payloadIndex + 6);
+#endif
+                            libiphoned_tx((unsigned char *)thePacketPtr, payloadIndex + 6);
+                        }
+#ifdef DEBUG_EQPT
+                        reconnDebugPrint("%s: Calling reconnEqptAddMsgToQ %d \n", __FUNCTION__,  payloadIndex + 6);
+#endif
+                        reconnEqptAddMsgToQ((char *)thePacketPtr, payloadIndex + 6);
                     }
-                    reconnDebugPrint("\n");
-#endif
-                    ADD_DATA_LENGTH_TO_PACKET(payloadIndex, thePacketPtr);
-                     //send(mySocketFd, (char *)thePacketPtr, payloadIndex + 6, 0);
-                   if(mode == INSERTEDMASTERMODE) 
-                   {
-#ifdef DEBUG_EQPT
-                       reconnDebugPrint("%s: Calling libiphoned_tx %d \n", __FUNCTION__,  payloadIndex + 6);
-#endif
-                       libiphoned_tx((unsigned char *)thePacketPtr, payloadIndex + 6);
-                   }
-#ifdef DEBUG_EQPT
-                   reconnDebugPrint("%s: Calling reconnEqptAddMsgToQ %d \n", __FUNCTION__,  payloadIndex + 6);
-#endif
-                   reconnEqptAddMsgToQ((char *)thePacketPtr, payloadIndex + 6);
+                    else
+                    {
+                        reconnDebugPrint("%s: no bytes to be read\n", __FUNCTION__);
+                        break;
+                    }
                 }
                 else
                 {

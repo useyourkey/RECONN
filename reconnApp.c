@@ -68,6 +68,7 @@
 #include <pthread.h>
 #include <mqueue.h>
 #include <errno.h>
+#include <linux/if.h>
 
 #include "reconn.h"
 #include "gps.h"
@@ -96,7 +97,7 @@ int dmmEnabled = FALSE;
 static pthread_t reconnThreadIds[RECONN_MAX_NUM_CLIENTS + RECONN_NUM_SYS_TASKS];
 static int  numberOfActiveClients = 0;
 static int in_socket_fd;
-static ReconnModeAndEqptDescriptors modeAndEqptDescriptors;
+ReconnModeAndEqptDescriptors modeAndEqptDescriptors;
 
 extern mqd_t masterClientMsgQid;
 static struct mq_attr masterClientMsgQAttr;
@@ -109,6 +110,7 @@ extern void *insertedMasterTransmitTask();
 extern void registerClientDebugMenu();
 extern void registerFuelGaugeDebugMenu();
 extern void registerSystemDebugMenu();
+extern void registerSocketDebugMenu();
 
 static void reconnCleanUp()
 {
@@ -230,11 +232,22 @@ void reconnReturnClientIndex(short index)
 extern void initReconnCrashHandlers(void);
 #endif
 
+//******************************************************************************
+//****************************************************************************** //
+// FUNCTION:    reconnMasterIphone
+//
+// DESCRIPTION: This function is registered with 
+//              libiphoned_register_presence_change_callback() and is invoked
+//              when the iphone library functions detect the removal or insertion 
+//              of an iphone in the front panel of the reconn unit.
+//
+//******************************************************************************
 void reconnMasterIphone()
 {
     pthread_t task;
     struct timespec wait_time;
     struct sockaddr_in masterTransmitAddr;
+    static int iphoneInserted = FALSE;
 #ifdef __SIMULATION__
     int simulate_isiphonepresent();
 #endif
@@ -314,13 +327,15 @@ void reconnMasterIphone()
         {
             reconnDebugPrint("%s: Could not start reconnClient, %d %s\n", __FUNCTION__, errno, strerror(errno));
         }
+        iphoneInserted = TRUE;
     }
-    else
+    else if(iphoneInserted == TRUE)
     {
         reconnDebugPrint("%s: Function Entered iphone EXTRACTED\n", __FUNCTION__);
 
         memset( &theMessage, 0xff, 4);
         theMessage[0] = MASTER_EXTRACTED;
+        printf("%s: masterClientMsgQid == %d\n", __FUNCTION__, masterClientMsgQid);
         if(mq_send(masterClientMsgQid, (const char *)&theMessage, sizeof(theMessage), 0) != 0)
         {
             reconnDebugPrint("%s: mq_send(masterClientMsgQid) failed. %d(%s)\n", __FUNCTION__, errno, strerror(errno));
@@ -346,7 +361,10 @@ int main(int argc, char **argv)
     struct sockaddr_in server_addr, client_addr;
     struct stat statInfo;
     struct sigaction act;
+    struct ifreq ifr;
+#ifdef __SIMULATION__
     int optval = 1;
+#endif
 
     UNUSED_PARAM(argc);
     UNUSED_PARAM(argv);
@@ -406,15 +424,29 @@ int main(int argc, char **argv)
         exit (0);
     }
 
+    memset(&ifr, 9, sizeof(ifr));
+    snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "wlan0");
+#ifndef __SIMULATION__
+    if(setsockopt(in_socket_fd, SOL_SOCKET, SO_BINDTODEVICE, &ifr, sizeof(ifr)) < 0)
+    {
+        reconnDebugPrint("%s: setsockopt failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+        exit(0);
+    }
+#else 
     if(setsockopt(in_socket_fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0)
     {
         reconnDebugPrint("%s: setsockopt failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
     }
+#endif
 
     bzero((unsigned char *) &server_addr, sizeof(server_addr));
     /* bind the socket */
     server_addr.sin_family = AF_INET;
+#ifndef __SIMULATION__
+    server_addr.sin_addr.s_addr = inet_addr("192.168.0.50");
+#else
     server_addr.sin_addr.s_addr = INADDR_ANY;
+#endif
     intport = RECONN_INCOMING_PORT;
     server_addr.sin_port = htons(intport);
 
@@ -423,21 +455,6 @@ int main(int argc, char **argv)
     {
         reconnDebugPrint("%s: Server Failed to bind the socket %d(%s)\n", __FUNCTION__, errno, strerror(errno));
         exit (0);
-    }
-    //
-    // Create the message queue used to tell the WiFi connected master client that an iPhone 
-    // has been inserted into the toolkit's front panel. The front panel iPhone is ALWAYS
-    // the master.
-    //
-    mq_unlink(INSERTED_MASTER_MSG_Q_NAME);
-    masterClientMsgQAttr.mq_flags   = 0;
-    masterClientMsgQAttr.mq_maxmsg   = 200;
-    masterClientMsgQAttr.mq_msgsize  = 10;
-    if((masterClientMsgQid = mq_open(INSERTED_MASTER_MSG_Q_NAME, 
-                    (O_RDWR | O_CREAT | O_NONBLOCK), 0, NULL)) == (mqd_t) -1)
-    {
-        reconnDebugPrint("%s: mq_open() failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
-        exit(0);
     }
 
     // If there is an upgrade in progress then start a task that will sleep for 5 minutes then run.
@@ -457,6 +474,7 @@ int main(int argc, char **argv)
     registerFuelGaugeDebugMenu();
     registerSystemDebugMenu();
     registerDmmDebugMenu();
+    registerSocketDebugMenu();
 
     if(pthread_create(&(reconnThreadIds[RECONN_MASTER_SOCKET_TASK]), NULL, insertedMasterTransmitTask, (void *)0) < 0)
     {
@@ -475,16 +493,22 @@ int main(int argc, char **argv)
         {
             reconnDebugPrint("%s: Could not start reconnPwrMgmtTask, %d %s\n", __FUNCTION__, errno, strerror(errno));
         }
+#if 0
         else if(pthread_create(&(reconnThreadIds[RECONN_PWR_BUTTON_TASK]), NULL, reconnPwrButtonTask, 
                     (void *)0) < 0)
         {
             reconnDebugPrint("%s: Could not start reconnPwrMgmtTask, %d %s\n", __FUNCTION__, errno, strerror(errno));
         }
+#endif
         else if(pthread_create(&(reconnThreadIds[RECONN_BATTERY_MONITOR_TASK]), NULL, reconnBatteryMonTask, (void *) 0 ) < 0)
         {
             reconnDebugPrint("%s: Could not start reconnBatteryMonTask, %d %s\n", __FUNCTION__, errno, strerror(errno));
         }
         else if(pthread_create(&(reconnThreadIds[RECONN_DEBUG_MENU_TASK]), NULL, debugMenuTask, (void *) 0 ) < 0)
+        {
+            reconnDebugPrint("%s: Could not start debugMenuTask,, %d %s\n", __FUNCTION__, errno, strerror(errno));
+        }
+        else if(pthread_create(&(reconnThreadIds[RECONN_POWER_METER_TASK]), NULL, powerMeterPresenceTask, (void *) 0 ) < 0)
         {
             reconnDebugPrint("%s: Could not start debugMenuTask,, %d %s\n", __FUNCTION__, errno, strerror(errno));
         }

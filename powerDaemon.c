@@ -66,13 +66,18 @@
 #include <signal.h>
 #include <semaphore.h>
 #include <getopt.h>
+
 #include "reconn.h"
 #include "gpio.h"
+#include "powerMgmt.h"
 
 static int retCode;
 
 int main(void) 
 {
+    FILE *powerButtonFd;
+    int theButtonValue;
+    int initialPowerUp = TRUE;
 
     /* Our process ID and Session ID */
     pid_t pid, sid;
@@ -124,6 +129,7 @@ int main(void)
             if (atoi((char *)&theButtonValue) == POWER_BUTTON_PRESSED)
             {
                 // Need to shutdown all power 
+#if 0
                 reconnGpioAction(GPIO_140, DISABLE);
                 reconnGpioAction(GPIO_141, DISABLE);
                 reconnGpioAction(GPIO_157, DISABLE);
@@ -131,7 +137,10 @@ int main(void)
                 reconnGpioAction(GPIO_157, DISABLE);
                 // Turn off the power LED
                 reconnGpioAction(GPIO_172, DISABLE);
-                reconnGpioAction(GPIO_156, DISABLE); // releases the 5V power latch to the board.
+#endif
+                printf("%s: button pressed\n", __FUNCTION__);
+                system("echo 0x1 > /sys/class/gpio/gpio156/value");
+                system("echo 0x8 > /proc/cpld/CPLD_Tx_DIR_setbit");
                 break;
             }
         }

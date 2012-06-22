@@ -126,7 +126,7 @@ static void process_msg_report_data(unsigned char *buf, int len);
 static void stopiphoned(void);
 static void processrx(unsigned char *inbuf, int len);
 static int getpidof(char const *process);
-//static int send_sock_msg(unsigned char cmdid, unsigned char *outbuf, int len);
+static int send_sock_msg(unsigned char cmdid, unsigned char *outbuf, int len);
 static void stop_iphoned_monitor(void);
 static int start_iphoned_monitor(void);
 void *iphoned_monitor_thread(void *ptr);
@@ -508,7 +508,7 @@ static void stopiphoned(void) {
  *
  * @return TRUE if iphoned socket is currently active.  FALSE otherwise.
  */
-#if 0
+#if 1
 static int send_sock_msg(unsigned char cmdid, unsigned char *outbuf, int len) {
 	unsigned char *buf;
 	int i = 0;

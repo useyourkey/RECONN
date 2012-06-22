@@ -57,7 +57,6 @@
 #ifndef __CLIENTAPP_H
 #define __CLIENTAPP_H
 
-#define MASTER_CLIENT_MSG_Q_NAME    "/mstRspQ"  // Wifi Connected master iPhone
 #define INSERTED_MASTER_MSG_Q_NAME  "/InsMstQ"  // Front panel inserted iPhone
 #define RECONNBEGIN "CFS RECONN 00.00 BEGIN"
 
