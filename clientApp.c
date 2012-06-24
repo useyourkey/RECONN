@@ -135,7 +135,7 @@ void *reconnClientTask(void *args)
     unsigned short responseId = 0;
     ReconnErrCodes retCode = RECONN_SUCCESS;
     short myIndex;
-    int theEqptFd;
+    int theEqptFd, numBytes;
     int responseNeeded;
     ReconnModeAndEqptDescriptors *pModeAndEqptDescriptors;
     ReconnMasterClientMode myMode;
@@ -212,55 +212,57 @@ void *reconnClientTask(void *args)
                 if(((errno == EAGAIN) || (errno == EWOULDBLOCK)) && 
                         (myMode != CLIENTMODE))
                 {
-                    int numBytes;
-                    mq_getattr(masterClientMsgQid, &masterClientMsgQAttr);
-                    if(masterClientMsgQAttr.mq_curmsgs)
+                    if((myMode == MASTERMODE) && 
+                            (mq_getattr(masterClientMsgQid, &masterClientMsgQAttr) == 0))
                     {
-                        if((numBytes = mq_receive(masterClientMsgQid, (char *)&masterClientMsgBuf, masterClientMsgQAttr.mq_msgsize, NULL)) == -1)
+                        if(masterClientMsgQAttr.mq_curmsgs)
                         {
-                            if(errno != EAGAIN)
+                            if((numBytes = mq_receive(masterClientMsgQid, (char *)&masterClientMsgBuf, masterClientMsgQAttr.mq_msgsize, NULL)) == -1)
                             {
-                                reconnDebugPrint("%s: mq_receive failed %d (%s)\n", __FUNCTION__, errno, strerror(errno));
-                            }
-                            continue;
-                        }
-                        else
-                        {
-                            if(masterClientMsgBuf[0] == MASTER_INSERTED)
-                            {
-                                int result;
-                                // send message to the iPhone client telling it 
-                                // that mastership has been removed because an 
-                                // iPhone has been inserted into the toolkit's 
-                                // front panel.
-                                reconnDebugPrint("%s: MASTER_INSERTED \n", __FUNCTION__);
-                                memset(theResponsePktPtr, 0, sizeof(theResponsePkt));
-
-                                sendReconnResponse (mySocketFd, 
-                                        ((MASTER_MODE_REMOVED_NOTIFICATION & 0xff00) >> 8),
-                                        thePacket.messageId.Byte[1], RECONN_ERROR_UNKNOWN, myMode);
-
-                                myMode = CLIENTMODE;
-                                fcntl(mySocketFd, F_GETFL, NULL);
-                                result &= (~O_NONBLOCK);
-                                fcntl(mySocketFd, F_SETFL, result);
-                                
-                                //send message to insertedMasterClient process
+                                if(errno != EAGAIN)
+                                {
+                                    reconnDebugPrint("%s: mq_receive failed %d (%s)\n", __FUNCTION__, errno, strerror(errno));
+                                }
                                 continue;
                             }
-                            else if(masterClientMsgBuf[0] == MASTER_EXTRACTED)
+                            else
                             {
-                                reconnDebugPrint("%s: MASTER_EXTRACTED \n", __FUNCTION__);
-                                reconnReturnClientIndex(myIndex);
-                                reconnDeRegisterClientApp(myIndex);
-                                masterClientSocketFd = -1;
-                                close(insertedMasterSocketFd);
-                                if(mq_close(masterClientMsgQid) == -1)
+                                if(masterClientMsgBuf[0] == MASTER_INSERTED)
                                 {
-                                    reconnDebugPrint("%s: mq_close() failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+                                    int result;
+                                    // send message to the iPhone client telling it 
+                                    // that mastership has been removed because an 
+                                    // iPhone has been inserted into the toolkit's 
+                                    // front panel.
+                                    reconnDebugPrint("%s: MASTER_INSERTED \n", __FUNCTION__);
+                                    memset(theResponsePktPtr, 0, sizeof(theResponsePkt));
+
+                                    sendReconnResponse (mySocketFd, 
+                                            ((MASTER_MODE_REMOVED_NOTIFICATION & 0xff00) >> 8),
+                                            thePacket.messageId.Byte[1], RECONN_ERROR_UNKNOWN, myMode);
+
+                                    myMode = CLIENTMODE;
+                                    fcntl(mySocketFd, F_GETFL, NULL);
+                                    result &= (~O_NONBLOCK);
+                                    fcntl(mySocketFd, F_SETFL, result);
+
+                                    //send message to insertedMasterClient process
+                                    continue;
                                 }
-                                masterClientMsgQid = -1;
-                                connection_open = FALSE;
+                                else if(masterClientMsgBuf[0] == MASTER_EXTRACTED)
+                                {
+                                    reconnDebugPrint("%s: MASTER_EXTRACTED \n", __FUNCTION__);
+                                    reconnReturnClientIndex(myIndex);
+                                    reconnDeRegisterClientApp(myIndex);
+                                    masterClientSocketFd = -1;
+                                    close(insertedMasterSocketFd);
+                                    if(mq_close(masterClientMsgQid) == -1)
+                                    {
+                                        reconnDebugPrint("%s: mq_close() failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+                                    }
+                                    masterClientMsgQid = -1;
+                                    connection_open = FALSE;
+                                }
                             }
                         }
                     }
@@ -317,9 +319,9 @@ void *reconnClientTask(void *args)
                          (cmdid != CLIENT_ACCESS_REQ) && 
                          (cmdid != MASTER_MODE_REQ)))
                 {
-                    // a command came in from the client that we do not like
+                    // a command came in from the client that we do not like so
                     // do nothing, and the client will deal with the lack of
-                    // response by closing the socket.
+                    // response.
                 }
                 else
                 {
@@ -451,8 +453,9 @@ void *reconnClientTask(void *args)
                             unsigned int length;
                             char *theSwVersionString; 
 
-                            reconnDebugPrint("%s: Received RECONN_SW_VERSION_NOTIF\n", __FUNCTION__);
+                            reconnDebugPrint("n%s: Received RECONN_SW_VERSION_NOTIF\n", __FUNCTION__);
 
+                            memset(theResponsePktPtr, 0, sizeof(theResponsePkt));
                             ADD_RSPID_TO_PACKET(GENERIC_RESPONSE, theResponsePktPtr);
                             ADD_MSGID_TO_PACKET(RECONN_SW_VERSION_REQ, theResponsePktPtr);
                             theSwVersionString = getReconnSwVersion();
@@ -466,8 +469,8 @@ void *reconnClientTask(void *args)
                             }
                             else
                             {
-                                sendSocket(masterClientSocketFd, (unsigned char *)theResponsePktPtr, 
-                                        length + 6, 0);
+                                sendSocket(masterClientSocketFd, 
+                                        (unsigned char *)theResponsePktPtr, length + 6, 0);
                             }
                             resetPowerStandbyCounter(RESET_SYSTEM_SHUTDOWN_TIME);
                             break;
@@ -798,8 +801,8 @@ void *reconnClientTask(void *args)
                         }
                         case SLAVES_SEND_MSG:
                         {
-                            reconnDebugPrint("%s: Received SLAVES_SEND_MSG %d\n", __FUNCTION__, p_length+6);
-                            reconnEqptAddMsgToQ((char *)&(thePacket), p_length + 6);
+                            reconnDebugPrint("%s: Received SLAVES_SEND_MSG %d\n", __FUNCTION__, p_length + 4);
+                            reconnEqptAddMsgToQ((char *)&(thePacket), p_length + 4);
                             resetPowerStandbyCounter(RESET_SYSTEM_SHUTDOWN_TIME);
                             break;
                         }

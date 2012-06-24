@@ -17,7 +17,7 @@ HEADERS=powerMeter.h spectrum.h gps.h reconn.h socket.h dmm.h clientApp.h powerM
 H_DEPENDENCIES:=$(addprefix include/, $(HEADERS))
 
 # All object files listed here
-OBJ=reconnApp.o gps.o powerMeter.o spectrum.o dmm.o clientApp.o socket.o socketMenu.o powerMgmt.o eqptResponse.o gpio.o  crashHandler.o debugMenu.o reconn_i2c.o fuelGauge.o extractBundle.o version.o libiphoned.o clientMenu.o  systemMenu.o fuelGaugeMenu.o dmmMenu.o
+OBJ=reconnApp.o gps.o powerMeter.o spectrum.o dmm.o clientApp.o socket.o socketMenu.o powerMgmt.o eqptResponse.o gpio.o  crashHandler.o debugMenu.o reconn_i2c.o fuelGauge.o version.o extractBundle.o libiphoned.o clientMenu.o  systemMenu.o fuelGaugeMenu.o dmmMenu.o
 
 all: reconn-service reconnDaemon
 
@@ -27,16 +27,18 @@ reconnDaemon: powerDaemon.o
 %.o: %.c $(H_DEPENDENCIES) makefile
 	$(CC) -c -o $@ $< $(CFLAGS) $(LINTFLAGS)
 
-version.c: GenerateBuildVersion.pl
-	./GenerateBuildVersion.pl
+#version.c: GenerateBuildVersion.pl
+#	./GenerateBuildVersion.pl
 
-version.o: version.c
+#version.o: version.c
 
 powerDaemon.o: powerDaemon.c
 	$(CC) $^ -o PowerDaemon $(CFLAGS)
 	@cp PowerDaemon ../rootfs/fs/usr/bin
 
 reconn-service: $(OBJ)
+	echo ********************
+	@./GenerateBuildVersion.pl
 	$(CC) -o $@ $^ $(CFLAGS) $(LIBS)
 	@rm -f cscope*
 	@rm -f tags*

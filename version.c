@@ -61,7 +61,7 @@ static char gReconnVersionMajor[] = majorLevel;
 static char gReconnVersionMinor[] = minorLevel;
 static char gReconnVersionPatch[] = patchLevel;
 static char gReconnSwVersionString[RECONN_STRING_MAX];
-static char gReconnVersionBuildDate[] = "Mon Apr 30 07:45:24 2012";
+static char gReconnVersionBuildDate[] = "Sat Jun 23 17:49:25 2012";
 static char gKernelVersionString[KERNEL_STRING_MAX];
 
 
