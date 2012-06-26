@@ -197,6 +197,8 @@ typedef enum
 
 typedef enum
 {
+    // The first 3 cannot change value 'cause it will break the 
+    // protocol between the embedded software and the iPhone application
     RECONN_SUCCESS = 1,
     RECONN_DENIED,
     RECONN_INVALID_PARAMETER,

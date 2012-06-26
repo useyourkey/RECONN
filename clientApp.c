@@ -82,6 +82,7 @@
 #include "version.h"
 #include "upgrade.h"
 #include "debugMenu.h"
+#include "wifi.h"
 
 // only used by a master client process
 mqd_t masterClientMsgQid = -1;
@@ -139,6 +140,8 @@ void *reconnClientTask(void *args)
     int responseNeeded;
     ReconnModeAndEqptDescriptors *pModeAndEqptDescriptors;
     ReconnMasterClientMode myMode;
+    char newSSID[WIFI_SSID_MAX_LENGTH + 1];
+    char newPasswd[WIFI_PASSWD_MAX_LENGTH + 1];
 #ifdef DEBUG_CLIENT
     int debugIndex;
     char *debugPtr;
@@ -346,6 +349,8 @@ void *reconnClientTask(void *args)
                             else
                             {
                                 /* The client has requested to be disconnected */
+                                sendReconnResponse(mySocketFd, thePacket.messageId.Byte[0],
+                                        thePacket.messageId.Byte[1], RECONN_SUCCESS, myMode);
                                 reconnDeRegisterClientApp(myIndex);
                                 reconnReturnClientIndex(myIndex);
                                 if(myMode == MASTERMODE)
@@ -514,15 +519,56 @@ void *reconnClientTask(void *args)
                                     break;
                                 }
                             }
+#endif
                             sendReconnResponse (mySocketFd, thePacket.messageId.Byte[0],
                                     thePacket.messageId.Byte[1], RECONN_INVALID_MESSAGE, myMode);
-#endif
                             resetPowerStandbyCounter(RESET_SYSTEM_SHUTDOWN_TIME);
                             break;
                         }
                         case WIFI_CHANGE_PASSWORD_REQ:
+                        {
+                            reconnDebugPrint("%s: Received WIFI_CHANGE_PASSWORD_REQ\n", __FUNCTION__);
+                            // passphrase must be between 8 and 63 characters
+                            if((p_length < 8) || (p_length > WIFI_PASSWD_MAX_LENGTH))
+                            {
+                                sendReconnResponse (mySocketFd, thePacket.messageId.Byte[0], 
+                                        thePacket.messageId.Byte[1], RECONN_INVALID_PARAMETER, myMode); 
+                            }
+                            else
+                            {
+                                memset(&newPasswd, 0, WIFI_PASSWD_MAX_LENGTH+1);
+                                strncat(&newPasswd[0], &thePacket.dataPayload[0], p_length);
+                                retCode = wifiUpdateConfFile(WIFI_PASSWD_TOKEN, &newPasswd[0]);
+                                sendReconnResponse (mySocketFd, 
+                                        thePacket.messageId.Byte[0], thePacket.messageId.Byte[1], retCode , myMode); 
+                                if(retCode == RECONN_SUCCESS)
+                                { 
+                                    system("/etc/init.d/hostapd reload");
+                                }
+                            }
+                            resetPowerStandbyCounter(RESET_SYSTEM_SHUTDOWN_TIME);
+                            break;
+                        }
                         case WIFI_CHANGE_SSID_REQ:
                         {
+                            reconnDebugPrint("%s: Received WIFI_CHANGE_SSID_REQ\n", __FUNCTION__);
+                            if(p_length > WIFI_SSID_MAX_LENGTH)
+                            {
+                                sendReconnResponse (mySocketFd, thePacket.messageId.Byte[0],
+                                        thePacket.messageId.Byte[1], RECONN_INVALID_PARAMETER, myMode); 
+                            }
+                            else
+                            {
+                                memset(&newSSID, 0, WIFI_SSID_MAX_LENGTH+1);
+                                strncat(newSSID, &thePacket.dataPayload[0], p_length);
+                                retCode = wifiUpdateConfFile(WIFI_SSID_TOKEN, &newSSID[0]);
+                                sendReconnResponse (mySocketFd, 
+                                        thePacket.messageId.Byte[0], thePacket.messageId.Byte[1], retCode, myMode); 
+                                if(retCode == RECONN_SUCCESS)
+                                {
+                                    system("/etc/init.d/hostapd reload");
+                                }
+                            }
                             resetPowerStandbyCounter(RESET_SYSTEM_SHUTDOWN_TIME);
                             break;
                         }

@@ -138,7 +138,6 @@ int main(void)
                 // Turn off the power LED
                 reconnGpioAction(GPIO_172, DISABLE);
 #endif
-                printf("%s: button pressed\n", __FUNCTION__);
                 system("echo 0x1 > /sys/class/gpio/gpio156/value");
                 system("echo 0x8 > /proc/cpld/CPLD_Tx_DIR_setbit");
                 break;

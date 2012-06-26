@@ -126,12 +126,12 @@ void *reconnPwrMgmtTask(void *argument)
         }
 #endif
 
-        if(!eqptStbyCounters.ReconnSystemCounter)
+        if(!(--eqptStbyCounters.ReconnSystemCounter))
         {
             reconnDebugPrint("%s: Powering Down the system\n", __FUNCTION__);
-            reconnGpioAction(POWER_5V_GPIO, DISABLE);
+            system("echo 0x1 > /sys/class/gpio/gpio156/value");
+            system("echo 0x8 > /proc/cpld/CPLD_Tx_DIR_setbit");
         }
-        eqptStbyCounters.ReconnSystemCounter --;
     }
 }
 
