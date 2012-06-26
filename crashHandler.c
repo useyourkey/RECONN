@@ -116,7 +116,7 @@ void initReconnCrashHandlers(void)
     sigaction(SIGSYS,  &act, NULL);
     sigaction(SIGXCPU, &act, NULL);
     sigaction(SIGXFSZ, &act, NULL);
-    sigaction(SIGPIPE, &act, NULL);
+    //sigaction(SIGPIPE, &act, NULL);
     sigaction(SIGSTKFLT, &act, NULL);
 
     // Catch the Abort signal.

@@ -37,7 +37,6 @@ powerDaemon.o: powerDaemon.c
 	@cp PowerDaemon ../rootfs/fs/usr/bin
 
 reconn-service: $(OBJ)
-	echo ********************
 	@./GenerateBuildVersion.pl
 	$(CC) -o $@ $^ $(CFLAGS) $(LIBS)
 	@rm -f cscope*

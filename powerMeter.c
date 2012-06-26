@@ -104,8 +104,8 @@ static ReconnErrCodes powerMeterOpen(int *fileDescriptor)
         // text returned then the device at ttyUSB1 is infact a power meter and therefore we can
         // say initializationis complete.
 
-        reconnDebugPrint("%s: Calling send \n", __FUNCTION__);
         memset(meterData, 0, dataLength);
+        reconnDebugPrint("%s: Calling write \n", __FUNCTION__);
         write(myMeterFd, POWER_METER_COMMAND, 2);
         sleep(1);
         if((bytesRead = read(myMeterFd, &meterData, dataLength)) < 0)
@@ -279,6 +279,12 @@ void *powerMeterPresenceTask(void *args)
                     }
                 }
             }
+        }
+        else
+        {
+            insertMessageSent  = FALSE;
+            extractMessageSent = FALSE;
+            meterInserted = FALSE;
         }
         sleep(POWER_METER_SCAN_SLEEP);
     }

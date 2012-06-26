@@ -152,6 +152,8 @@ void *reconnClientTask(void *args)
     myMode = pModeAndEqptDescriptors->clientMode;
 
     reconnDebugPrint("%s: Sending %s to client %d\n", __FUNCTION__, RECONNBEGIN, myIndex);
+
+
     if(myMode == INSERTEDMASTERMODE)
     {
         // Send response out the 30 pin USB 
@@ -344,8 +346,6 @@ void *reconnClientTask(void *args)
                             else
                             {
                                 /* The client has requested to be disconnected */
-                                sendReconnResponse(mySocketFd, thePacket.messageId.Byte[0], 
-                                        thePacket.messageId.Byte[1], RECONN_SUCCESS, myMode);
                                 reconnDeRegisterClientApp(myIndex);
                                 reconnReturnClientIndex(myIndex);
                                 if(myMode == MASTERMODE)
@@ -528,6 +528,9 @@ void *reconnClientTask(void *args)
                         }
                         case SPECANA_POWER_SET_REQ:
                         {
+#ifdef DEBUG_EQPT
+                            reconnDebugPrint("%s: Received SPECANA_POWER_SET_REQ\n", __FUNCTION__);
+#endif
                             if ((thePacket.dataPayload[0] == POWER_ON) || 
                                     (thePacket.dataPayload[0] == POWER_OFF))
                             {
@@ -619,10 +622,14 @@ void *reconnClientTask(void *args)
                         }
                         case PMETER_PKT_SEND_REQ:
                         {
+#ifdef DEBUG_EQPT
                             reconnDebugPrint("%s: Received  PMETER_PKT_SEND_REQ:\n", __FUNCTION__);
+#endif
                             if (masterClientSocketFd == mySocketFd) 
                             {
+#ifdef DEBUG_EQPT
                                 reconnDebugPrint("%s: Sending %c of length %d to power meter\n", __FUNCTION__, thePacket.dataPayload[0], p_length);
+#endif 
                                 // The power meter is a USB device that can be plugged in at any time.
                                 // If the meter is plugged in at boot time, PeripherliInit() would have
                                 // opened ttyUSB1.  If this call returns RECONN_PM_PORT_NOT_INITIALIZED
@@ -643,6 +650,9 @@ void *reconnClientTask(void *args)
                         }
                         case DMM_POWER_SET_REQ:
                         {
+#ifdef DEBUG_EQPT
+                            reconnDebugPrint("%s: DMM_POWER_SET_REQ \n", __FUNCTION__);
+#endif
                             if ((thePacket.dataPayload[0] == POWER_ON) || 
                                     (thePacket.dataPayload[0] == POWER_OFF))
                             {
@@ -669,14 +679,20 @@ void *reconnClientTask(void *args)
                         }
                         case DMM_PKT_SEND_REQ:
                         {
+#ifdef DEBUG_EQPT
                             reconnDebugPrint("%s: Received DMM_PKT_SEND_REQ\n", __FUNCTION__);
+#endif
                             if (masterClientSocketFd == mySocketFd) 
                             {
+#ifdef DEBUG_EQPT
                                 reconnDebugPrint("%s: Sending %c to meter\n", __FUNCTION__, thePacket.dataPayload[0]);
+#endif
                                 dmmWrite((unsigned char *)&(thePacket.dataPayload), p_length);
                                 sendReconnResponse(mySocketFd,
                                         thePacket.messageId.Byte[0], thePacket.messageId.Byte[1], RECONN_SUCCESS, myMode);
+#ifdef DEBUG_EQPT
                                 reconnDebugPrint("%s: Success Sent back to client\n", __FUNCTION__);
+#endif
                                 responseId = DMM_PKT_RCVD_NOTIFICATION;
                                 theEqptFd = pModeAndEqptDescriptors->dmmFd;
                                 responseNeeded = TRUE;
@@ -686,7 +702,9 @@ void *reconnClientTask(void *args)
                         }
                         case DMM_BUILTINTEST_REQ:
                         {
+#ifdef DEBUG_EQPT
                             reconnDebugPrint("%s: Received DMM_BUILTINTEST_REQ\n", __FUNCTION__);
+#endif
                             sendReconnResponse (mySocketFd, thePacket.messageId.Byte[0], 
                                     thePacket.messageId.Byte[1], dmmDiags(), myMode); 
 
@@ -695,7 +713,9 @@ void *reconnClientTask(void *args)
                         }
                         case LNB_POWER_SET_REQ:
                         {
+#ifdef DEBUG_EQPT
                             reconnDebugPrint("%s: Received LNB_POWER_SET_REQ\n", __FUNCTION__);
+#endif
                             if ((thePacket.dataPayload[0] == POWER_ON) || 
                                     (thePacket.dataPayload[0] == POWER_OFF))
                             {
@@ -725,8 +745,10 @@ void *reconnClientTask(void *args)
                         }
                         case LNB_SA_10MHZ:
                         {
+#ifdef DEBUG_EQPT
                             reconnDebugPrint("%s: Received LNB_SA_10MHZ %d\n", __FUNCTION__, 
                                     thePacket.dataPayload[0]); 
+#endif
 
                             if ((thePacket.dataPayload[0] == POWER_ON) || 
                                     (thePacket.dataPayload[0] == POWER_OFF))
@@ -754,8 +776,10 @@ void *reconnClientTask(void *args)
                         }
                         case LNB_10MHZ:
                         {
+#ifdef DEBUG_EQPT
                             reconnDebugPrint("%s: Received LNB_10MHZ %d\n", __FUNCTION__, 
                                     thePacket.dataPayload[0] );
+#endif
                             if ((thePacket.dataPayload[0] == POWER_ON) || 
                                     (thePacket.dataPayload[0] == POWER_OFF))
                             {
