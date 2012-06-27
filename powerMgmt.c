@@ -71,6 +71,7 @@
 // counters to keep track of when a piece of equipment should go into power conservation 
 // mode. I.E. powered down
 static PowerMgmtEqptCounters eqptStbyCounters; 
+extern ReconnModeAndEqptDescriptors modeAndEqptDescriptors;
 
 //******************************************************************************
 //******************************************************************************
@@ -119,12 +120,13 @@ void *reconnPwrMgmtTask(void *argument)
             reconnGpioAction(GPS_ENABLE_GPIO, DISABLE);
             reconnDebugPrint("%s: GPS is going into Conservation Mode\n", __FUNCTION__);
         }
+#endif
         if((--eqptStbyCounters.SpectrumAnalyzerCounter) == 0)
         {
             reconnGpioAction(POWER_18V_GPIO, DISABLE);
             reconnDebugPrint("%s: Spectrum Analyzer is going into Conservation Mode\n", __FUNCTION__);
+            SpectrumAnalyzerclose(&(modeAndEqptDescriptors.analyzerFd));
         }
-#endif
 
         if(!(--eqptStbyCounters.ReconnSystemCounter))
         {

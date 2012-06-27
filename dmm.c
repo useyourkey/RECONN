@@ -126,7 +126,6 @@ static char *dmmStatusResult[] = {
     "oaa",
 };
 
-
 //*************************************************************************************
 //*************************************************************************************
 // FUNCTION:        diagsGetResponse
@@ -149,7 +148,7 @@ static ReconnErrCodes diagsGetResponse(char *buffer, int length)
     FD_SET(myDmmFd, &theFileDescriptor);
 
     waitTime.tv_sec = 0;
-    waitTime.tv_usec = 100000;
+    waitTime.tv_usec = 300000;
 
     do
     {

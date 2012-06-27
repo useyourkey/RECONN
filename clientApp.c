@@ -170,9 +170,14 @@ void *reconnClientTask(void *args)
         sendSocket(mySocketFd, (unsigned char *)RECONNBEGIN, strlen(RECONNBEGIN), 0);
     }
 
-    reconnDebugPrint("%s: reconnClientTask started myIndex %d\n", __FUNCTION__, myIndex);
-    reconnDebugPrint("%s: reconnClientTask started myMode == %s\n", __FUNCTION__, (myMode == MASTERMODE) ? "Master": (myMode == INITMODE) ? "Init" : "Inserted Master");
-    reconnDebugPrint("%s: reconnClientTask started mySocketFd %d\n", __FUNCTION__, mySocketFd);
+    reconnDebugPrint("%s: reconnClientTask myIndex %d\n", __FUNCTION__, myIndex);
+    reconnDebugPrint("%s:                  myMode == %s\n", __FUNCTION__, (myMode == MASTERMODE) ? "Master": (myMode == INITMODE) ? "Init" : "Inserted Master");
+    reconnDebugPrint("%s:                  mySocketFd %d\n", __FUNCTION__, mySocketFd);
+    reconnDebugPrint("\n%s:                  gpsFd %d\n", __FUNCTION__, pModeAndEqptDescriptors->gpsFd);
+    reconnDebugPrint("%s:                  powerMeterFd %d\n", __FUNCTION__, pModeAndEqptDescriptors->powerMeterFd);
+    reconnDebugPrint("%s:                  lnbFd %d\n", __FUNCTION__, pModeAndEqptDescriptors->lnbFd);
+    reconnDebugPrint("%s:                  dmmFd %d\n", __FUNCTION__, pModeAndEqptDescriptors->dmmFd);
+    reconnDebugPrint("%s:                  analyzerFd %d\n", __FUNCTION__, pModeAndEqptDescriptors->analyzerFd);
 
 
     reconnDebugPrint("%s: registering client with eqptTask\n", __FUNCTION__);
@@ -612,7 +617,17 @@ void *reconnClientTask(void *args)
 #ifdef DEBUG_SPECTRUM
                                 reconnDebugPrint("%s: Calling SpectrumAnalyzerWrite p_length = %d \n", __FUNCTION__, p_length);
 #endif
-                                SpectrumAnalyzerWrite((unsigned char *)&(thePacket.dataPayload), p_length);
+                                if(SpectrumAnalyzerWrite((unsigned char *)&(thePacket.dataPayload), p_length) == RECONN_SA_PORT_NOT_INITIALIZED)
+                                {
+                                    if(SpectrumAnalyzerInit(&(pModeAndEqptDescriptors->analyzerFd)) == RECONN_FAILURE)
+                                    {
+                                        sendReconnResponse (mySocketFd, 
+                                                thePacket.messageId.Byte[0], 
+                                                thePacket.messageId.Byte[1], RECONN_FAILURE, myMode); 
+                                        break;
+                                    }
+                                    SpectrumAnalyzerWrite((unsigned char *)&(thePacket.dataPayload), p_length);
+                                }
                                 responseId = SPECANA_PKT_RCVD_NOTIFICATION;
                                 theEqptFd = pModeAndEqptDescriptors->analyzerFd;
                                 responseNeeded = TRUE;

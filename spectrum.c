@@ -157,6 +157,12 @@ static ReconnErrCodes SpectrumAnalyzerOpen(int *fileDescriptor)
     return (retCode);
 }
 
+ReconnErrCodes SpectrumAnalyzerclose(int *fileDescriptor) 
+{
+    close(fileDescriptor);
+    *fileDescriptor = -1;
+    SAPortInit  = FALSE;
+}
 ReconnErrCodes SpectrumAnalyzerInit(int *fileDescriptor) 
 {
     int ret_status = 0;
@@ -196,7 +202,7 @@ ReconnErrCodes SpectrumAnalyzerWrite(unsigned char *buffer, int length)
     if (SAPortInit == FALSE) 
     {
         reconnDebugPrint("%s: Spectrum Analyzer port is not initialized\n", __FUNCTION__);
-        retcode =  RECONN_FAILURE;
+        retcode =  RECONN_SA_PORT_NOT_INITIALIZED;
     }
     else
     {

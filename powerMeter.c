@@ -74,6 +74,24 @@ struct termios meterSerial;
 int pm_wait_flag = TRUE;
 static int PowerMeterPortInit = FALSE;
 
+ReconnErrCodes powerMeterClose(int *fileDescriptor)
+{
+#ifdef DEBUG_EQPT
+    reconnDebugPrint("%s: Function Entered\n", __FUNCTION__);
+#endif
+    if(fileDescriptor != -1)
+    {
+        close(fileDescriptor);
+        PowerMeterPortInit = FALSE;
+        *fileDescriptor = -1;
+        return RECONN_SUCCESS;
+    }
+    else
+    {
+        reconnDebugPrint("%s: bad fileDescriptor %d\n", __FUNCTION__, fileDescriptor);
+        return RECONN_FAILURE;
+    }
+}
 static ReconnErrCodes powerMeterOpen(int *fileDescriptor) 
 {
     ReconnErrCodes retCode = RECONN_SUCCESS;
@@ -218,7 +236,7 @@ void *powerMeterPresenceTask(void *args)
                         {
                             reconnDebugPrint("%s: Sending extract message\n", __FUNCTION__);
                             modeAndEqptDescriptors.powerMeterFd = -1;
-                            PowerMeterPortInit = FALSE;
+                            powerMeterClose(&(modeAndEqptDescriptors.powerMeterFd));
                             if(insertedMasterSocketFd != -1)
                             {
                                 sendReconnResponse(insertedMasterSocketFd, 
@@ -254,7 +272,7 @@ void *powerMeterPresenceTask(void *args)
                 {
                     if(powerMeterInit(&(modeAndEqptDescriptors.powerMeterFd)) == RECONN_SUCCESS)
                     {
-                        reconnDebugPrint("%s: Sending insertion message\n", __FUNCTION__);
+                        reconnDebugPrint("%s: Sending insertion message for powerMeterFd %d\n", __FUNCTION__, modeAndEqptDescriptors.powerMeterFd);
                         if(insertedMasterSocketFd != -1)
                         {
                             sendReconnResponse(insertedMasterSocketFd, 
@@ -285,6 +303,10 @@ void *powerMeterPresenceTask(void *args)
             insertMessageSent  = FALSE;
             extractMessageSent = FALSE;
             meterInserted = FALSE;
+            if(modeAndEqptDescriptors.powerMeterFd != -1)
+            {
+                powerMeterClose(&(modeAndEqptDescriptors.powerMeterFd));
+            }
         }
         sleep(POWER_METER_SCAN_SLEEP);
     }

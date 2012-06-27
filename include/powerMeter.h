@@ -78,4 +78,5 @@ int pm_command_processing(unsigned char *command, int length, unsigned char *buf
 		int *outlength);
 int makePowerMeterOutput(unsigned char *pm_outputbuffer, int *pm_outputlength);
 extern void *powerMeterPresenceTask(void *args);
+extern ReconnErrCodes powerMeterClose(int *fileDescriptor);
 #endif /* __POWERMETER_H */

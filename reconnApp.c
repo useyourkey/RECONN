@@ -388,6 +388,7 @@ int main(int argc, char **argv)
         reconnThreadIds[i] = -1;
     }
     PeripheralInit(&modeAndEqptDescriptors);
+    dmmDiags();
 
 #ifndef __SIMULATION__
     //
@@ -453,7 +454,7 @@ int main(int argc, char **argv)
     reconnDebugPrint("%s: binding to socket\n", __FUNCTION__);
     if (bind(in_socket_fd, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0) 
     {
-        reconnDebugPrint("%s: Server Failed to bind the socket %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+        reconnDebugPrint("reconnApp: Server Failed to bind the socket %d(%s)\n",  errno, strerror(errno));
         exit (0);
     }
 
