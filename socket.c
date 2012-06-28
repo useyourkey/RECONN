@@ -82,16 +82,17 @@ void sendSocket(int socket_fd, unsigned char * buffer_s, int length, int num)
 
     if(socketPrint == TRUE)
     {
-        reconnDebugPrint("%s: ", __FUNCTION__);
-        for (i = 0; i < length; ++i) {
-            reconnDebugPrint("<%x>", (unsigned int) buffer_s[i]);
+        reconnDebugPrint("%s(%d): ", __FUNCTION__, socket_fd);
+        for (i = 0; i < length; ++i) 
+        {
+            reconnDebugPrint("%x ", (unsigned int) buffer_s[i]);
         }
-        reconnDebugPrint("\n\n\n");
+        reconnDebugPrint("\n\n");
     }
     errCode = send(socket_fd, buffer_s, length, num);
     if(errCode == -1)
     {
-        reconnDebugPrint("%s: send failed %d %s\n", __FUNCTION__, errno, strerror(errno));
+        reconnDebugPrint("%s: socket_fd == %d send failed %d %s\n", __FUNCTION__, socket_fd, errno, strerror(errno));
     }
     else if(errCode != length)
     {

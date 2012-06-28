@@ -60,6 +60,7 @@
 #define INSERTED_MASTER_MSG_Q_NAME  "/InsMstQ"  // Front panel inserted iPhone
 #define RECONNBEGIN "CFS RECONN 00.00 BEGIN"
 
+#define INSERTED_MASTER_MSG_SIZE 4
 typedef enum
 {
     MASTER_INSERTED,    // master client has been inserted into front panel

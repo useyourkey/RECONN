@@ -101,7 +101,7 @@ ReconnModeAndEqptDescriptors modeAndEqptDescriptors;
 
 extern mqd_t masterClientMsgQid;
 static struct mq_attr masterClientMsgQAttr;
-static unsigned char theMessage[4];
+static unsigned char theMessage[INSERTED_MASTER_MSG_SIZE];
 
 extern int masterClientSocketFd;
 extern void insertedMasterRead();
@@ -270,9 +270,9 @@ void reconnMasterIphone()
             // send current master a message telling it to give up control
             
             // Then start a clientApp() as master.
-            memset( &theMessage, 0, 4);
+            memset( &theMessage, 0, INSERTED_MASTER_MSG_SIZE);
             theMessage[0] = MASTER_INSERTED;
-            if(mq_send(masterClientMsgQid, (const char *)&theMessage, sizeof(theMessage), 0) != 0)
+            if(mq_send(masterClientMsgQid, (const char *)&theMessage, INSERTED_MASTER_MSG_SIZE, 0) != 0)
             {
                 reconnDebugPrint("%s: mq_send(masterClientMsgQid) failed. %d(%s)\n", __FUNCTION__, errno, strerror(errno));
             }
@@ -333,10 +333,10 @@ void reconnMasterIphone()
     {
         reconnDebugPrint("%s: Function Entered iphone EXTRACTED\n", __FUNCTION__);
 
-        memset( &theMessage, 0xff, 4);
+        memset( &theMessage, 0, INSERTED_MASTER_MSG_SIZE);
         theMessage[0] = MASTER_EXTRACTED;
         printf("%s: masterClientMsgQid == %d\n", __FUNCTION__, masterClientMsgQid);
-        if(mq_send(masterClientMsgQid, (const char *)&theMessage, sizeof(theMessage), 0) != 0)
+        if(mq_send(masterClientMsgQid, (const char *)&theMessage, INSERTED_MASTER_MSG_SIZE, 0) != 0)
         {
             reconnDebugPrint("%s: mq_send(masterClientMsgQid) failed. %d(%s)\n", __FUNCTION__, errno, strerror(errno));
         }
