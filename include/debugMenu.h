@@ -63,6 +63,7 @@
 #define DEBUG_PROMPT_MAX_SIZE 30
 #define DEBUG_PROMPT "reconn debug >"
 #define DEBUG_TIMEOUT_MESSAGE "\r\n*******You are being disconnected due to inactivity timeout\r\n"
+#define DEBUG_INACTIVITY_TIMEOUT 1200
 
 typedef struct
 {

@@ -68,7 +68,7 @@ static char * getInput(int theDebugSocketFd)
     
     for(;;)
     {
-        timeout.tv_sec = 1200; // 10 minutes
+        timeout.tv_sec = DEBUG_INACTIVITY_TIMEOUT; 
         timeout.tv_usec = 0;
         
         FD_ZERO(&debugFdSet);
