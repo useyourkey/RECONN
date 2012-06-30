@@ -47,6 +47,7 @@ void reconnDebugPrint(const char *fmt, ...)
 static void debugCleanUp()
 {
     reconnDebugPrint("%s: **** Called\n", __FUNCTION__);
+    enableExternalMessages = FALSE;
     close(debugListenFd);
 }
 
@@ -76,6 +77,7 @@ static char * getInput(int theDebugSocketFd)
         {
             sendSocket(theDebugSocketFd, (unsigned char *)DEBUG_TIMEOUT_MESSAGE, strlen(DEBUG_TIMEOUT_MESSAGE), 0);
 
+            enableExternalMessages = FALSE;
             close(theDebugSocketFd);
             theDebugSocketFd = -1;
             return 0;
@@ -83,6 +85,7 @@ static char * getInput(int theDebugSocketFd)
         if((retCode = recv((int)theDebugSocketFd, &c, 1, 0)) <= 0)
         {
             reconnDebugPrint("%s: recv returned %d\n", __FUNCTION__, retCode);
+            enableExternalMessages = FALSE;
             close(theDebugSocketFd);
             theDebugSocketFd = -1;
             return 0;
@@ -215,6 +218,7 @@ void *debugMenuTask(void *argument)
                 if(select(theDebugSocketFd+1, &debugFdSet, NULL, NULL, &timeout) <= 0)
                 {
                     sendSocket(theDebugSocketFd, (unsigned char *)DEBUG_TIMEOUT_MESSAGE, strlen(DEBUG_TIMEOUT_MESSAGE), 0);
+                    enableExternalMessages = FALSE;
                     close(theDebugSocketFd);
                     theDebugSocketFd = -1;
                     continue;
@@ -222,6 +226,7 @@ void *debugMenuTask(void *argument)
                 if((retCode = recv((int)theDebugSocketFd, &buff, DEBUG_INPUT_LEN, 0)) <= 0)
                 {
                     reconnDebugPrint("%s: recv returned %d\n", __FUNCTION__, retCode);
+                    enableExternalMessages = FALSE;
                     close(theDebugSocketFd);
                     theDebugSocketFd = -1;
                     continue;
@@ -283,6 +288,7 @@ void *debugMenuTask(void *argument)
                                 if((strncasecmp(inputString, "quit", 4) == 0)  || (strncasecmp(inputString, "q", 1) == 0))
                                 {
                                     free(inputString);
+                                    enableExternalMessages = FALSE;
                                     close(theDebugSocketFd);
                                     theDebugSocketFd = -1;
                                     needHelp = 0;
@@ -379,6 +385,7 @@ void *debugMenuTask(void *argument)
         else
         {
             reconnDebugPrint("%s: listen returned  =%d(%s) \n", __FUNCTION__, errno, strerror(errno));
+            enableExternalMessages = FALSE;
             close(debugListenFd);
             theDebugSocketFd = -1;
 
