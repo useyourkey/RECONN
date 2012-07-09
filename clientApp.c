@@ -463,8 +463,6 @@ void *reconnClientTask(void *args)
                         length = strlen(theSwVersionString);
                         ADD_DATA_LENGTH_TO_PACKET(length, theResponsePktPtr);
                         strcat(&(theResponsePktPtr->dataPayload[0]), theSwVersionString);
-                        printf("%s: theSwVersionString == %s\n", __FUNCTION__, theSwVersionString);
-                        printf("%s: theResponsePktPtr->dataPayload[0] == %s\n", __FUNCTION__, theResponsePktPtr->dataPayload);
                         if(myMode == INSERTEDMASTERMODE)
                         {
                             // Send response out the 30 pin USB 
