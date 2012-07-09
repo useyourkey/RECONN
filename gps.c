@@ -107,9 +107,9 @@ ReconnErrCodes gpsInit(int *fileDescriptor)
     ReconnErrCodes retcode = RECONN_SUCCESS;
     *fileDescriptor = -1;
 
-    if(reconnGpioAction(GPIO_147, ENABLE) == RECONN_FAILURE)
+    if(reconnGpioAction(GPIO_147, ENABLE, NULL) == RECONN_FAILURE)
     {
-        reconnDebugPrint("%s: reconnGpioAction(GPIO_147, ENABLE) failed. \n", __FUNCTION__);
+        reconnDebugPrint("%s: reconnGpioAction(GPIO_147, ENABLE, NULL) failed. \n", __FUNCTION__);
         retcode = RECONN_FAILURE;
     }
     else

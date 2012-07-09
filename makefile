@@ -2,9 +2,9 @@
 #CC=gcc
 
 INCDIR= ./include
-CC=arm-none-linux-gnueabi-gcc
+CC=arm-none-linux-gnueabi-gcc  -rdynamic -funwind-tables
 #CC= gcc -g -D __SIMULATION__
-CFLAGS=-I$(INCDIR) -rdynamic
+CFLAGS=-I$(INCDIR)
 
 LINTFLAGS:= -Wall -Wextra -Wformat 
 #LINTFLAGS:= -Wall 
@@ -17,9 +17,15 @@ HEADERS=powerMeter.h spectrum.h gps.h reconn.h socket.h dmm.h clientApp.h powerM
 H_DEPENDENCIES:=$(addprefix include/, $(HEADERS))
 
 # All object files listed here
-OBJ=reconnApp.o gps.o powerMeter.o spectrum.o dmm.o clientApp.o socket.o socketMenu.o powerMgmt.o eqptResponse.o gpio.o  crashHandler.o debugMenu.o reconn_i2c.o fuelGauge.o version.o extractBundle.o libiphoned.o clientMenu.o  systemMenu.o fuelGaugeMenu.o dmmMenu.o wifi.o
+OBJ=reconnApp.o gps.o powerMeter.o spectrum.o dmm.o clientApp.o socket.o socketMenu.o powerMgmt.o eqptResponse.o gpio.o crashHandler.o debugMenu.o reconn_i2c.o fuelGauge.o version.o extractBundle.o libiphoned.o clientMenu.o  systemMenu.o fuelGaugeMenu.o dmmMenu.o wifi.o
 
-all: reconn-service reconnDaemon
+default: all
+
+Genversion:
+	@./GenerateBuildVersion.pl
+	$(CC) -c version.c -o version.o $(CFLAGS) $(LINTFLAGS)
+
+all: Genversion reconn-service reconnDaemon
 
 reconnDaemon: powerDaemon.o
 
@@ -32,8 +38,7 @@ powerDaemon.o: powerDaemon.c
 	@cp PowerDaemon ../rootfs/fs/usr/bin
 
 reconn-service: $(OBJ)
-	@./GenerateBuildVersion.pl
-	$(CC) -o $@ $^ $(CFLAGS) $(LIBS)
+	$(CC) -rdynamic -o $@ $^ $(CFLAGS) $(LIBS)
 	@rm -f cscope*
 	@rm -f tags*
 	@ls *.c > cscope.files

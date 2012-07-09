@@ -114,7 +114,7 @@ extern void registerSocketDebugMenu();
 
 static void reconnCleanUp()
 {
-    reconnDebugPrint("%s:****** Task Called\n", __FUNCTION__);
+    reconnDebugPrint("%s:****** Function Called\n", __FUNCTION__);
     reconnDebugPrint("%s:****** closing in_socket_fd\n", __FUNCTION__, in_socket_fd);
     close(in_socket_fd);
     reconnDebugPrint("%s:****** closing fromLibToClientfd\n", __FUNCTION__, in_socket_fd);
@@ -128,7 +128,7 @@ static void *upgradeCheckTask(void *args)
 
     UNUSED_PARAM(args);
     system("killall powerLedFlash");
-    reconnGpioAction(POWER_LED_GPIO, ENABLE);
+    reconnGpioAction(POWER_LED_GPIO, ENABLE, NULL);
     reconnDebugPrint("%s:****** Removing %s\n", __FUNCTION__, UPGRADE_INPROGRESS_FILE_NAME);
     unlink(UPGRADE_INPROGRESS_FILE_NAME);
     unlink(UPGRADE_BUNDLE_NAME);
@@ -139,7 +139,7 @@ static void PeripheralInit(ReconnModeAndEqptDescriptors *modeEqptDescriptors)
 {
     int status = RECONN_SUCCESS;
 
-    /* initialize the GPS - (GPS_SERIAL_PORT) */
+#if 0 // GPS has been removed from the reconn box
     if((status = gpsInit(&(modeEqptDescriptors->gpsFd))) != RECONN_SUCCESS)
     {
         reconnDebugPrint("%s: GPS Init Failed\n", __FUNCTION__);
@@ -150,6 +150,7 @@ static void PeripheralInit(ReconnModeAndEqptDescriptors *modeEqptDescriptors)
         reconnDebugPrint("GPS Initialized\n");
     }
     /* end GPS Init - GPS now configured */
+#endif
 
     if((status = SpectrumAnalyzerInit(&(modeEqptDescriptors->analyzerFd))) != RECONN_SUCCESS) 
     {
@@ -181,7 +182,7 @@ static void PeripheralInit(ReconnModeAndEqptDescriptors *modeEqptDescriptors)
         reconnDebugPrint("%s: DMM Initialized\n", __FUNCTION__);
     }
     // Power up the Wifi chip
-    if((status = reconnGpioAction(GPIO_57, ENABLE)) == RECONN_FAILURE)
+    if((status = reconnGpioAction(GPIO_57, ENABLE, NULL)) == RECONN_FAILURE)
     {
         reconnDebugPrint("%s: Could not power up WiFi device \n", __FUNCTION__);
     }
@@ -362,9 +363,7 @@ int main(int argc, char **argv)
     struct stat statInfo;
     struct sigaction act;
     struct ifreq ifr;
-#ifdef __SIMULATION__
     int optval = 1;
-#endif
 
     UNUSED_PARAM(argc);
     UNUSED_PARAM(argv);
@@ -387,8 +386,6 @@ int main(int argc, char **argv)
     {
         reconnThreadIds[i] = -1;
     }
-    PeripheralInit(&modeAndEqptDescriptors);
-    dmmDiags();
 
 #ifndef __SIMULATION__
     //
@@ -410,14 +407,6 @@ int main(int argc, char **argv)
     }
 #endif
     
-#ifdef DEBUG_CONNECT
-    reconnDebugPrint("%s: modeAndEqptDescriptors->GpsFd = %d\n", __FUNCTION__, modeAndEqptDescriptors.gpsFd);
-    reconnDebugPrint("      modeAndEqptDescriptors->PowerMeterFd = %d\n", modeAndEqptDescriptors.powerMeterFd);
-    reconnDebugPrint("      modeAndEqptDescriptors->LnbFd = %d\n", modeAndEqptDescriptors.lnbFd);
-    reconnDebugPrint("      modeAndEqptDescriptors->DmmFd = %d\n", modeAndEqptDescriptors.dmmFd);
-    reconnDebugPrint("      modeAndEqptDescriptors->AnalyzerFd = %d\n", modeAndEqptDescriptors.analyzerFd);
-#endif
-
     /* Create the incoming (server) socket */
     if((in_socket_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) 
     {
@@ -430,15 +419,14 @@ int main(int argc, char **argv)
 #ifndef __SIMULATION__
     if(setsockopt(in_socket_fd, SOL_SOCKET, SO_BINDTODEVICE, &ifr, sizeof(ifr)) < 0)
     {
-        reconnDebugPrint("%s: setsockopt failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+        reconnDebugPrint("%s: setsockopt SO_BINDTODEVICE failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
         exit(0);
     }
-#else 
+#endif
     if(setsockopt(in_socket_fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0)
     {
-        reconnDebugPrint("%s: setsockopt failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+        reconnDebugPrint("%s: setsockopt SO_REUSEADDR failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
     }
-#endif
 
     bzero((unsigned char *) &server_addr, sizeof(server_addr));
     /* bind the socket */
@@ -468,6 +456,15 @@ int main(int argc, char **argv)
             reconnDebugPrint("%s: Could not start reconnEqptTask %d %s\n", __FUNCTION__, errno, strerror(errno));
         }
     }
+    PeripheralInit(&modeAndEqptDescriptors);
+#ifdef DEBUG_CONNECT
+    reconnDebugPrint("%s: modeAndEqptDescriptors->GpsFd = %d\n", __FUNCTION__, modeAndEqptDescriptors.gpsFd);
+    reconnDebugPrint("      modeAndEqptDescriptors->PowerMeterFd = %d\n", modeAndEqptDescriptors.powerMeterFd);
+    reconnDebugPrint("      modeAndEqptDescriptors->LnbFd = %d\n", modeAndEqptDescriptors.lnbFd);
+    reconnDebugPrint("      modeAndEqptDescriptors->DmmFd = %d\n", modeAndEqptDescriptors.dmmFd);
+    reconnDebugPrint("      modeAndEqptDescriptors->AnalyzerFd = %d\n", modeAndEqptDescriptors.analyzerFd);
+#endif
+    dmmDiags();
     //
     // Startup debug menus
     //

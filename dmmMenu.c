@@ -29,18 +29,18 @@ void registerDmmDebugMenu()
 
 static int meterOn()
 {
-    if(reconnGpioAction(DMM_POWER_GPIO, ENABLE) == RECONN_FAILURE)
+    if(reconnGpioAction(DMM_POWER_GPIO, ENABLE, NULL) == RECONN_FAILURE)
     {
-        reconnDebugPrint("%s: reconnGpioAction(DMM_POWER_GPIO, ENABLE) failed. \n", __FUNCTION__);
+        reconnDebugPrint("%s: reconnGpioAction(DMM_POWER_GPIO, ENABLE, NULL) failed. \n", __FUNCTION__);
     }
     return RECONN_SUCCESS;
 }
 
 static int meterOff()
 {
-    if(reconnGpioAction(DMM_POWER_GPIO, DISABLE) == RECONN_FAILURE)
+    if(reconnGpioAction(DMM_POWER_GPIO, DISABLE, NULL) == RECONN_FAILURE)
     {
-        reconnDebugPrint("%s: reconnGpioAction(DMM_POWER_GPIO, DISABLE) failed. \n", __FUNCTION__);
+        reconnDebugPrint("%s: reconnGpioAction(DMM_POWER_GPIO, DISABLE, NULL) failed. \n", __FUNCTION__);
     }
     return RECONN_SUCCESS;
 }

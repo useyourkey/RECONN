@@ -35,7 +35,7 @@ typedef enum
 #define LNB_10MHZ_GPIO          GPIO_144
 #define CHARGE_DISABLE_GPIO     GPIO_145
 #define SA_10MHZ_GPIO           GPIO_146
-#define GPS_ENABLE_GPIO         GPIO_147
+#define LNB_18VDC_GPIO          GPIO_147
 #define POWER_5V_GPIO           GPIO_156
 #define POWER_12V_GPIO          GPIO_157
 #define BATTERY_THERMO_GPIO     GPIO_158
@@ -52,8 +52,9 @@ typedef enum
 typedef enum
 {
     DISABLE,
-    ENABLE
+    ENABLE,
+    READ
 }GpioAction;
 
-extern ReconnErrCodes reconnGpioAction(GpioNames, GpioAction);
+extern ReconnErrCodes reconnGpioAction(GpioNames, GpioAction, short *);
 #endif

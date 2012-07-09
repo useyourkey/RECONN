@@ -62,14 +62,15 @@
 #include <sys/stat.h>
 #include <execinfo.h>
 #include <signal.h>
+#include <errno.h>
 #include <ucontext.h>
 #include "reconn.h"
 
 //#define TRACE_START 3 // NPTL
-#define TRACE_START 4  // LinuxThreads
+#define TRACE_START 0  // LinuxThreads
 #define TRACE_MAX   50
 
-#define LOG_FS_DIR  "/mnt/logs"
+#define LOG_FS_DIR  "/usr/bin"
 
 // Debug variable which disables card reset after crash when set.
 int gDisableCrashReset = FALSE;
@@ -116,7 +117,7 @@ void initReconnCrashHandlers(void)
     sigaction(SIGSYS,  &act, NULL);
     sigaction(SIGXCPU, &act, NULL);
     sigaction(SIGXFSZ, &act, NULL);
-    //sigaction(SIGPIPE, &act, NULL);
+    sigaction(SIGPIPE, &act, NULL);
     sigaction(SIGSTKFLT, &act, NULL);
 
     // Catch the Abort signal.
@@ -158,29 +159,34 @@ void initReconnCrashHandlers(void)
  */
 void crashHandler(int signo, siginfo_t *sigInfo, void *ptr)
 {
-    int num_frames;
+    int num_frames, j;
     void *tracebuf[TRACE_MAX];
+    char **strings;
     char outbuf[120];
     char sigdesc[100];
     char faultdesc[120];
     ucontext_t *uc = (ucontext_t *)ptr;
     FILE *lfp = NULL;
 
-    sleep(5);
-    crashPrint(NULL, "\n\n\n!!! CRASH !!!\n");
+    sleep(1);
 
+    memset(sigdesc, 0, 100);
+    memset(faultdesc, 0, 120);
     switch (signo)
     {
         case SIGBUS:
+            crashPrint(NULL, "\n\n\n!!! CRASH !!!\n");
             sprintf(sigdesc, "Bus Error (SIGBUS #%d)\n", signo);
             break;
         case SIGILL:
             sprintf(sigdesc, "Illegal Instruction (SIGILL #%d)\n", signo);
             break;
         case SIGSEGV:
+            crashPrint(NULL, "\n\n\n!!! CRASH !!!\n");
             sprintf(sigdesc, "Invalid Memory Reference (SIGSEGV #%d)\n", signo);
             break;
         case SIGFPE:
+            crashPrint(NULL, "\n\n\n!!! CRASH !!!\n");
             sprintf(sigdesc, "Invalid Arithmetic Operation (SIGFPE #%d)\n", signo);
             break;
         case SIGPIPE:
@@ -214,8 +220,23 @@ void crashHandler(int signo, siginfo_t *sigInfo, void *ptr)
     // Get the backtrace.
     num_frames = backtrace(tracebuf, TRACE_MAX);
 
+    strings = backtrace_symbols(tracebuf, num_frames);
+    if (strings == NULL)
+    {
+        reconnDebugPrint("%s: backtrace_symbols() returned 0", __FUNCTION__);
+    }
+    else
+    {
+        for (j = 0; j < num_frames; j++)
+        {
+            printf("%s\n", strings[j]);
+        }
+        free(strings);
+    }
+
+
     // Replace the signal entry point with the crash address.
-    tracebuf[TRACE_START] = (void *)uc->uc_mcontext.arm_ip;
+    //tracebuf[TRACE_START] = (void *)uc->uc_mcontext.arm_ip;
 
     crashPrintBacktrace(lfp, tracebuf, num_frames);
 
@@ -227,10 +248,14 @@ void crashHandler(int signo, siginfo_t *sigInfo, void *ptr)
     }
 
     // Allow time for the crash dump to be output to the serial port.
-    sleep(20);
+    sleep(10);
 
-    // Save the time for the next bootup.
-    //DoPOreset();
+    if(signo != SIGPIPE)
+    {
+        // Save the time for the next bootup.
+        system("killall iphoned");
+        system("killall reconn-service");
+    }
 }
 
 /*
@@ -251,7 +276,9 @@ void abortHandler(int signo, siginfo_t *sigInfo, void *ptr)
 
     fflush(stdout);
     sleep(10);
-    //DoPOreset();
+    // Save the time for the next bootup.
+    system("killall iphoned");
+    system("killall reconn-service");
 }
 
 /*
@@ -267,6 +294,8 @@ void defaultSignalHandler(int signo, siginfo_t *sigInfo, void *ptr)
 
     crashPrint(NULL, "\n\n\n!!! Unexpected Signal !!!\n");
 
+    memset(sigdesc, 0, 100);
+    memset(outbuf, 0, 120);
     sprintf(sigdesc, "%.60s (signal #%d)\n", strsignal(signo), signo);
     crashPrint(NULL, sigdesc);
     fflush(stdout);
@@ -286,7 +315,9 @@ void defaultSignalHandler(int signo, siginfo_t *sigInfo, void *ptr)
     if (lfp != NULL) 
         fclose(lfp);
     sleep(10);
-    //DoPOreset();
+    // Save the time for the next bootup.
+    system("killall iphoned");
+    system("killall reconn-service");
 }
 
 
@@ -303,6 +334,7 @@ void crashPrintBacktrace(FILE *fp, void *tracebuf[], int num_frames)
     FILE *mfp;
 
     crashPrint(fp, "Backtrace:\n");
+    printf("num_frames = %d\n", num_frames);
 
     for (i=TRACE_START; i < num_frames; i++)
     {
@@ -406,8 +438,13 @@ FILE *crashCreateLogFile(char *outbuf)
         sprintf(outbuf, "Crash log for %s\n", "reconn-service");
         crashWrite(outbuf, strlen(outbuf), fileno(lfp));
     }
+    else
+    {
+        reconnDebugPrint("%s: fopen(%s/crashlog.txt, w) failed %d (%s)\n", __FUNCTION__, LOG_FS_DIR, errno, strerror(errno));
+    }
 
     return lfp;
 }
+
 #endif
 

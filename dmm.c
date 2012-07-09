@@ -250,9 +250,9 @@ ReconnErrCodes dmmInit(int *fileDescriptor)
     char dmmResponse[DMM_MAX_RESPONSE];
     *fileDescriptor = -1;
 
-    if(reconnGpioAction(DMM_POWER_GPIO, ENABLE) == RECONN_FAILURE)
+    if(reconnGpioAction(DMM_POWER_GPIO, ENABLE, NULL) == RECONN_FAILURE)
     {
-        reconnDebugPrint("%s: reconnGpioAction(DMM_POWER_GPIO, ENABLE) failed. \n", __FUNCTION__);
+        reconnDebugPrint("%s: reconnGpioAction(DMM_POWER_GPIO, ENABLE, NULL) failed. \n", __FUNCTION__);
         retcode = RECONN_FAILURE;
     }
     else
@@ -268,16 +268,16 @@ ReconnErrCodes dmmInit(int *fileDescriptor)
             {
                 reconnDebugPrint("%s: no Response disable GPIO %d \n", __FUNCTION__, DMM_POWER_GPIO);
                 //power meter might be in shutdown mode. Wake it up.
-                if(reconnGpioAction(DMM_POWER_GPIO, DISABLE) == RECONN_FAILURE)
+                if(reconnGpioAction(DMM_POWER_GPIO, DISABLE, NULL) == RECONN_FAILURE)
                 {
-                    reconnDebugPrint("%s: reconnGpioAction(DMM_POWER_GPIO, DISABLE) failed. \n", __FUNCTION__);
+                    reconnDebugPrint("%s: reconnGpioAction(DMM_POWER_GPIO, DISABLE, NULL) failed. \n", __FUNCTION__);
                     retcode = RECONN_FAILURE;
                 }
                 usleep(50000);
                 reconnDebugPrint("%s: ENABLE GPIO %d \n", __FUNCTION__, DMM_POWER_GPIO);
-                if(reconnGpioAction(DMM_POWER_GPIO, ENABLE) == RECONN_FAILURE)
+                if(reconnGpioAction(DMM_POWER_GPIO, ENABLE, NULL) == RECONN_FAILURE)
                 {
-                    reconnDebugPrint("%s: reconnGpioAction(DMM_POWER_GPIO, ENABLE) failed. \n", __FUNCTION__);
+                    reconnDebugPrint("%s: reconnGpioAction(DMM_POWER_GPIO, ENABLE, NULL) failed. \n", __FUNCTION__);
                     retcode = RECONN_FAILURE;
                 }
                 sleep(6);

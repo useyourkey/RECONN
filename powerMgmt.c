@@ -111,19 +111,19 @@ void *reconnPwrMgmtTask(void *argument)
         }
         if((--eqptStbyCounters.DmmCounter) == 0)
         {
-            reconnGpioAction(DMM_POWER_GPIO, DISABLE);
+            reconnGpioAction(DMM_POWER_GPIO, DISABLE, NULL);
             reconnDebugPrint("%s: Dmm is going into Conservation Mode\n", __FUNCTION__);
         }
         if((--eqptStbyCounters.GpsCounter) == 0)
         {
-            reconnGpioAction(GPS_ANTANNAE_GPIO, DISABLE);
-            reconnGpioAction(GPS_ENABLE_GPIO, DISABLE);
+            reconnGpioAction(GPS_ANTANNAE_GPIO, DISABLE, NULL);
+            reconnGpioAction(GPS_ENABLE_GPIO, DISABLE, NULL);
             reconnDebugPrint("%s: GPS is going into Conservation Mode\n", __FUNCTION__);
         }
 #endif
         if((--eqptStbyCounters.SpectrumAnalyzerCounter) == 0)
         {
-            reconnGpioAction(POWER_18V_GPIO, DISABLE);
+            reconnGpioAction(POWER_18V_GPIO, DISABLE, NULL);
             reconnDebugPrint("%s: Spectrum Analyzer is going into Conservation Mode\n", __FUNCTION__);
             SpectrumAnalyzerclose(&(modeAndEqptDescriptors.analyzerFd));
         }
@@ -200,8 +200,8 @@ void *reconnBatteryMonTask(void *argument)
             if (retry_count++ > FUEL_GAUGE_RETRY_COUNT)
             {
                 reconnDebugPrint("%s: FATAL ERROR! Unable to restore communicati0on with the fuel gauge, aborting!\n", __FUNCTION__);
-                reconnGpioAction(BATTERY_LED_RED_GPIO, ENABLE);
-                reconnGpioAction(BATTERY_LED_GREEN_GPIO, DISABLE);
+                reconnGpioAction(BATTERY_LED_RED_GPIO, ENABLE, NULL);
+                reconnGpioAction(BATTERY_LED_GREEN_GPIO, DISABLE, NULL);
                 break;
             }
 
@@ -211,8 +211,8 @@ void *reconnBatteryMonTask(void *argument)
             {
                 fuel_gauge_status_string(status, &psstatus);
                 reconnDebugPrint("%s: fuel_gauge_power_on_reset() failed %d(%s)\n", __FUNCTION__, status, psstatus);
-                reconnGpioAction(BATTERY_LED_RED_GPIO, ENABLE);
-                reconnGpioAction(BATTERY_LED_GREEN_GPIO, DISABLE);
+                reconnGpioAction(BATTERY_LED_RED_GPIO, ENABLE, NULL);
+                reconnGpioAction(BATTERY_LED_GREEN_GPIO, DISABLE, NULL);
                 break;
             }
 
@@ -228,7 +228,7 @@ void *reconnBatteryMonTask(void *argument)
         {
             // To protect the battery pack we have to power down the reconn unit
             // if the charge percentage falls below 5%
-            reconnGpioAction(POWER_5V_GPIO, ENABLE);
+            reconnGpioAction(POWER_5V_GPIO, ENABLE, NULL);
         }
         else if(batteryPercentage == 5)
         {
@@ -236,13 +236,13 @@ void *reconnBatteryMonTask(void *argument)
             {
                 // we are at 5% battery charge percentage so we have to flash
                 // the battery status LED Red and off.
-                reconnGpioAction(BATTERY_LED_RED_GPIO, DISABLE);
+                reconnGpioAction(BATTERY_LED_RED_GPIO, DISABLE, NULL);
                 ledColor = OFF;
             }
             else
             {
-                reconnGpioAction(BATTERY_LED_RED_GPIO, ENABLE);
-                reconnGpioAction(BATTERY_LED_GREEN_GPIO, DISABLE);
+                reconnGpioAction(BATTERY_LED_RED_GPIO, ENABLE, NULL);
+                reconnGpioAction(BATTERY_LED_GREEN_GPIO, DISABLE, NULL);
                 ledColor = RED;
             }
         }
@@ -250,13 +250,13 @@ void *reconnBatteryMonTask(void *argument)
         {
             if(ledColor != RED)
             {
-                reconnGpioAction(BATTERY_LED_RED_GPIO, ENABLE);
-                reconnGpioAction(BATTERY_LED_GREEN_GPIO, DISABLE);
+                reconnGpioAction(BATTERY_LED_RED_GPIO, ENABLE, NULL);
+                reconnGpioAction(BATTERY_LED_GREEN_GPIO, DISABLE, NULL);
                 ledColor = RED;
             }
             else if(chargerAttached == ATTACHED)
             {
-                reconnGpioAction(BATTERY_LED_RED_GPIO, DISABLE);
+                reconnGpioAction(BATTERY_LED_RED_GPIO, DISABLE, NULL);
                 ledColor = OFF;
             }
         }
@@ -264,8 +264,8 @@ void *reconnBatteryMonTask(void *argument)
         {
             if(ledColor != GREEN)
             {
-                reconnGpioAction(BATTERY_LED_GREEN_GPIO, ENABLE);
-                reconnGpioAction(BATTERY_LED_RED_GPIO, DISABLE);
+                reconnGpioAction(BATTERY_LED_GREEN_GPIO, ENABLE, NULL);
+                reconnGpioAction(BATTERY_LED_RED_GPIO, DISABLE, NULL);
                 ledColor = GREEN;
             }
         }
@@ -273,13 +273,13 @@ void *reconnBatteryMonTask(void *argument)
         {
             if(ledColor != GREEN)
             {
-                reconnGpioAction(BATTERY_LED_GREEN_GPIO, ENABLE);
-                reconnGpioAction(BATTERY_LED_RED_GPIO, DISABLE);
+                reconnGpioAction(BATTERY_LED_GREEN_GPIO, ENABLE, NULL);
+                reconnGpioAction(BATTERY_LED_RED_GPIO, DISABLE, NULL);
                 ledColor = GREEN;
             }
             else if(chargerAttached == ATTACHED)
             {
-                reconnGpioAction(BATTERY_LED_GREEN_GPIO, DISABLE);
+                reconnGpioAction(BATTERY_LED_GREEN_GPIO, DISABLE, NULL);
                 ledColor = OFF;
             }
         }
@@ -304,7 +304,7 @@ void *reconnBatteryMonTask(void *argument)
                 if(chargeEnable)
                 {
                     /* disable charging. Enabling the GPIO shuts down charging*/
-                    reconnGpioAction(CHARGE_DISABLE_GPIO, ENABLE);
+                    reconnGpioAction(CHARGE_DISABLE_GPIO, ENABLE, NULL);
                     chargeEnable = FALSE;
                 }
             }
@@ -329,14 +329,14 @@ void *reconnBatteryMonTask(void *argument)
                 }
                 if(thermistorValue == TEMP_IN_RANGE)
                 {
-                    reconnGpioAction(CHARGE_DISABLE_GPIO, DISABLE);
+                    reconnGpioAction(CHARGE_DISABLE_GPIO, DISABLE, NULL);
                     chargeEnable = TRUE;
                 }
             }
         }
         else if (chargeEnable)
         {
-            reconnGpioAction(CHARGE_DISABLE_GPIO, ENABLE);
+            reconnGpioAction(CHARGE_DISABLE_GPIO, ENABLE, NULL);
             chargeEnable = FALSE;
         }
 
@@ -368,6 +368,19 @@ void *reconnBatteryMonTask(void *argument)
 }
 
 
+//******************************************************************************
+//******************************************************************************
+//
+// FUNCTION:    resetPowerStandbyCounter
+//
+// DESCRIPTION: Interface used to reset the overall system and various equipment 
+//              timers. These timer, when they expire, will shutdown their respective
+//              eqpt or the system.
+//
+// Parameters:
+//              theEqpt -  an timer enumeration
+//
+//******************************************************************************
 void resetPowerStandbyCounter(PowerMgmtEqptType theEqpt)
 {
     switch(theEqpt)
@@ -402,4 +415,37 @@ void resetPowerStandbyCounter(PowerMgmtEqptType theEqpt)
         }
     }
     eqptStbyCounters.ReconnSystemCounter = RECONN_POWER_DOWN_TIME;
+}
+
+//******************************************************************************
+//******************************************************************************
+//
+// FUNCTION:    getStandbyCounters
+//
+// DESCRIPTION: Interface used by system debug menu to get a copy of the system's
+//              standby counters for display.
+//
+// Parameters:
+//              counterBuf - a data structure into which this function will write
+//                           the standby values.
+//
+//******************************************************************************
+ReconnErrCodes getStandbyCounters(PowerMgmtEqptCounters *counterBuf)
+{
+    ReconnErrCodes retCode = RECONN_SUCCESS;
+
+    if(counterBuf == NULL)
+    {
+        reconnDebugPrint("%s: input parameter is NULL\n", __FUNCTION__);
+        retCode = RECONN_INVALID_PARAMETER;
+    }
+    else
+    {
+        counterBuf->PowerMeterCounter = eqptStbyCounters.PowerMeterCounter;
+        counterBuf->DmmCounter = eqptStbyCounters.DmmCounter;
+        counterBuf->GpsCounter = eqptStbyCounters.GpsCounter;
+        counterBuf->SpectrumAnalyzerCounter = eqptStbyCounters.SpectrumAnalyzerCounter;
+        counterBuf->ReconnSystemCounter = eqptStbyCounters.ReconnSystemCounter;
+    }
+    return(retCode);
 }

@@ -162,7 +162,10 @@ typedef enum
 {
     LNB_POWER_SET_REQ =         0x0600,
     LNB_SA_10MHZ =              0x0601,
-    LNB_10MHZ =                 0x0602
+    LNB_10MHZ =                 0x0602,
+    LNB_18VDC_BIAS =            0x0603,
+    LNB_HARDWARE_FAIL =         0x0604,
+    LNB_GPIO_STATES =           0x0605
 }LnbCommands;
 
 typedef enum 
@@ -273,7 +276,7 @@ typedef enum
 #define UNUSED_PARAM(parm) parm=parm;
 
 
-
+#define RECONN_PACKET_HEADER_SIZE 4 // messageId+dataLength
 typedef struct 
 {
     union
@@ -289,6 +292,7 @@ typedef struct
     char dataPayload[RECONN_PAYLOAD_SIZE];
 }ReconnPacket;
 
+#define RECONN_RSPPACKET_HEADER_SIZE 6 // rspId+dataLength+messageId
 typedef struct 
 {
     union

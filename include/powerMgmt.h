@@ -104,8 +104,9 @@ typedef struct
     int ReconnSystemCounter;
 }PowerMgmtEqptCounters;
 
-void *reconnPwrMgmtTask(void *);
-void *reconnPwrButtonTask(void *);
-void resetPowerStandbyCounter(PowerMgmtEqptType);
-void *reconnBatteryMonTask(void *argument);
+extern void *reconnPwrMgmtTask(void *);
+extern void *reconnPwrButtonTask(void *);
+extern void resetPowerStandbyCounter(PowerMgmtEqptType);
+extern void *reconnBatteryMonTask(void *argument);
+extern ReconnErrCodes getStandbyCounters(PowerMgmtEqptCounters *);
 #endif 

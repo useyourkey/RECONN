@@ -153,7 +153,7 @@ int main(void)
         sleep(2);
 #endif
     }
-    printf("%s: **** Task is in Ending\n", "ReconnPowerButton");
+    printf("%s: **** Task is Ending\n", "ReconnPowerButton");
     return retCode;
 }
 

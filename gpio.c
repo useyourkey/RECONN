@@ -102,7 +102,7 @@ GpioStruct GpioTable [] = {
     {GPIOROOT"gpio174/value", GPIOROOT"gpio174/direction"}, // GPIO 174 DMM Power
 };
 
-ReconnErrCodes reconnGpioAction(GpioNames theGpio, GpioAction theAction)
+ReconnErrCodes reconnGpioAction(GpioNames theGpio, GpioAction theAction, short *theReadValue)
 {
     ReconnErrCodes retCode = RECONN_SUCCESS;
 #ifndef __SIMULATION__
@@ -114,7 +114,7 @@ ReconnErrCodes reconnGpioAction(GpioNames theGpio, GpioAction theAction)
 #ifdef DEBUG_GPIO
     reconnDebugPrint("%s: Function Entered with theGpio %s, theAction %s\n", __FUNCTION__, GpioDebugNames[theGpio], (theAction == DISABLE) ? "DISABLE" : "ENABLE");
 #endif
-    if((theAction != ENABLE) && (theAction != DISABLE))
+    if((theAction != ENABLE) && (theAction != DISABLE) && (theAction != READ))
     {
         reconnDebugPrint("%s: Invalid Action %d\n", __FUNCTION__, theAction);
         retCode = RECONN_FAILURE;
@@ -122,6 +122,11 @@ ReconnErrCodes reconnGpioAction(GpioNames theGpio, GpioAction theAction)
     else if(theGpio > GPIO_175)
     {
         reconnDebugPrint("%s: Invalid gpio name %d\n", __FUNCTION__, theGpio);
+        retCode = RECONN_FAILURE;
+    }
+    else if((theAction == READ) && (theReadValue == NULL))
+    {
+        reconnDebugPrint("%s: action is READ but the buffer into which the value is to placed is NULL\n", __FUNCTION__);
         retCode = RECONN_FAILURE;
     }
     else
@@ -174,32 +179,61 @@ ReconnErrCodes reconnGpioAction(GpioNames theGpio, GpioAction theAction)
         else
         {
             gpioPathPtr = GpioTable[theGpio].gpioValueFileName;
-#ifdef DEBUG_GPIO
-            reconnDebugPrint("%s: calling fopen(%s, \"w+\")\n", __FUNCTION__, gpioPathPtr);
-#endif
-            if((gpioFd = fopen(gpioPathPtr, "w+")) != NULL)
+            if(theAction == READ)
             {
-#ifdef DEBUG_GPIO
-                reconnDebugPrint("%s: Calling fputc(%c, %d)\n", __FUNCTION__, (theAction == ENABLE) ? '1':'0', (int)gpioFd);
-#endif
-                fputc((theAction == ENABLE) ? '1':'0', gpioFd);
-                if((theGpioValue = fgetc(gpioFd)) == EOF)
+                reconnDebugPrint("%s: calling fopen(%s, r)\n", __FUNCTION__, gpioPathPtr);
+                if((gpioFd = fopen(gpioPathPtr, "r")) != NULL)
                 {
-                    reconnDebugPrint("%s, %d: fgetc() for %s failed %d(%s)\n", __FUNCTION__, __LINE__, gpioPathPtr, errno, strerror(errno));
-                    retCode = RECONN_FAILURE;
+                    if((theGpioValue = fgetc(gpioFd)) == EOF)
+                    {
+                        reconnDebugPrint("%s, %d: fgetc() for %s failed %d(%s)\n", __FUNCTION__, __LINE__, gpioPathPtr, errno, strerror(errno));
+                        retCode = RECONN_FAILURE;
+                    }
+                    else
+                    {
+                        *theReadValue = theGpioValue;
+#ifdef DEBUG_GPIO
+                        reconnDebugPrint("%s, %d: fgetc() returned %d\n", __FUNCTION__, __LINE__, (char)theGpioValue);
+#endif
+                    }
+                    fclose(gpioFd);
                 }
                 else
                 {
-#ifdef DEBUG_GPIO
-                    reconnDebugPrint("%s, %d: fgetc() returned %d\n", __FUNCTION__, __LINE__, (char)theGpioValue);
-#endif
+                    reconnDebugPrint("%s:  fopen(%s, r) failed %d(%s)\n", __FUNCTION__, gpioPathPtr, errno, strerror(errno));
+                    retCode = RECONN_FAILURE;
                 }
-                fclose(gpioFd);
+
             }
             else
             {
-                reconnDebugPrint("%s:  fopen(%s, w) failed %d(%s)\n", __FUNCTION__, gpioPathPtr, errno, strerror(errno));
-                retCode = RECONN_FAILURE;
+#ifdef DEBUG_GPIO
+                reconnDebugPrint("%s: calling fopen(%s, w+)\n", __FUNCTION__, gpioPathPtr);
+#endif
+                if((gpioFd = fopen(gpioPathPtr, "w+")) != NULL)
+                {
+#ifdef DEBUG_GPIO
+                    reconnDebugPrint("%s: Calling fputc(%c, %d)\n", __FUNCTION__, (theAction == ENABLE) ? '1':'0', (int)gpioFd);
+#endif
+                    fputc((theAction == ENABLE) ? '1':'0', gpioFd);
+                    if((theGpioValue = fgetc(gpioFd)) == EOF)
+                    {
+                        reconnDebugPrint("%s, %d: fgetc() for %s failed %d(%s)\n", __FUNCTION__, __LINE__, gpioPathPtr, errno, strerror(errno));
+                        retCode = RECONN_FAILURE;
+                    }
+                    else
+                    {
+#ifdef DEBUG_GPIO
+                        reconnDebugPrint("%s, %d: fgetc() returned %d\n", __FUNCTION__, __LINE__, (char)theGpioValue);
+#endif
+                    }
+                    fclose(gpioFd);
+                }
+                else
+                {
+                    reconnDebugPrint("%s:  fopen(%s, w) failed %d(%s)\n", __FUNCTION__, gpioPathPtr, errno, strerror(errno));
+                    retCode = RECONN_FAILURE;
+                }
             }
         }
 #endif

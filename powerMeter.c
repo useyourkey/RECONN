@@ -138,7 +138,7 @@ static ReconnErrCodes powerMeterOpen(int *fileDescriptor)
         }
         else
         {
-            printf("%s: power meter responded length = %d (%s)\n", __FUNCTION__, dataLength, meterData);
+            printf("%s: power meter responded bytesRead = %d (%s)\n", __FUNCTION__, bytesRead, meterData);
             retCode = RECONN_FAILURE;
         }
     }

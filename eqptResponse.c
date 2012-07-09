@@ -115,7 +115,10 @@ ReconnErrCodes reconnDeRegisterClientApp(short theIndex)
 #ifdef SOCKET_MUTEX
         pthread_mutex_lock(&socketMutex);
 #endif
-        close(socketIdList[theIndex]);
+        if(close(socketIdList[theIndex]) !=0)
+        {
+            reconnDebugPrint("%s: close(%d) failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+        }
         socketIdList[theIndex] = -1;
 #ifdef SOCKET_MUTEX
         pthread_mutex_lock(&socketMutex);
@@ -133,6 +136,7 @@ ReconnErrCodes reconnDeRegisterClientApp(short theIndex)
 int reconnClientsRegistered()
 {
     int i, numClients = 0;
+    extern int insertedMasterSocketFd;
 #ifdef SOCKET_MUTEX
     reconnDebugPrint("%s: Calling pthread_mutex_lock\n", __FUNCTION__);
     pthread_mutex_lock(&socketMutex);
@@ -143,6 +147,10 @@ int reconnClientsRegistered()
         {
             numClients++;
         }
+    }
+    if(insertedMasterSocketFd != -1)
+    {
+        numClients++;
     }
 #ifdef SOCKET_MUTEX
     reconnDebugPrint("%s: Calling pthread_mutex_unlock\n", __FUNCTION__);
@@ -249,7 +257,7 @@ void *reconnEqptTask(void *args)
 #ifdef DEBUG_EQPT
                         reconnDebugPrint("%s: Sending message to client socket %d\n", __FUNCTION__, socketIdList[i]);
 #endif
-                        sendSocket(socketIdList[i], &eqptMsgBuf, msgSize, 0);
+                        sendSocket(socketIdList[i], (unsigned char *)&eqptMsgBuf, msgSize, 0);
 #ifdef DEBUG_EQPT
 #endif
                     

@@ -170,9 +170,9 @@ ReconnErrCodes SpectrumAnalyzerInit(int *fileDescriptor)
 
     // Apply power to the analyzer.
     *fileDescriptor = -1;
-    if(reconnGpioAction(GPIO_141, ENABLE) == RECONN_FAILURE)
+    if(reconnGpioAction(GPIO_141, ENABLE, NULL) == RECONN_FAILURE)
     {
-        reconnDebugPrint("%s: reconnGpioAction(GPIO_141, ENABLE) failed. \n", __FUNCTION__);
+        reconnDebugPrint("%s: reconnGpioAction(GPIO_141, ENABLE, NULL) failed. \n", __FUNCTION__);
         retcode = RECONN_FAILURE;
     }
     else 
