@@ -270,6 +270,7 @@ void *reconnClientTask(void *args)
                                 reconnDeRegisterClientApp(myIndex);
                                 masterClientSocketFd = -1;
                                 close(insertedMasterSocketFd);
+                                insertedMasterSocketFd = -1;
                                 if(mq_close(masterClientMsgQid) == -1)
                                 {
                                     reconnDebugPrint("%s: mq_close() failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
@@ -479,8 +480,9 @@ void *reconnClientTask(void *args)
                     case BATTERY_LEVEL_REQ:
                     {
                         extern uint8_t batteryPercentage;
-
+#ifdef DEBUG_EQPT
                         reconnDebugPrint("%s: Received BATTERY_LEVEL_REQ\n", __FUNCTION__);
+#endif
 
                         sendReconnResponse (mySocketFd, (BATTERY_LEVEL_RSP & 0xff00) >> 8,
                                 (BATTERY_LEVEL_RSP & 0x00ff), batteryPercentage, myMode);
@@ -491,8 +493,10 @@ void *reconnClientTask(void *args)
                     {
                         extern char chargerAttached;
 
+#ifdef DEBUG_EQPT
                         reconnDebugPrint("%s: Received BATTERY_CHARGE_STATE_REQ\n",
                                 __FUNCTION__);
+#endif
 
                         sendReconnResponse (mySocketFd, 
                                 (BATTERY_CHARGE_STATE_RSP & 0xff00) >> 8,
