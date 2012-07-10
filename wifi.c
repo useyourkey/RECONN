@@ -153,7 +153,6 @@ ReconnErrCodes wifiUpdateConfFile(char *token, char *theNewValue)
         }
         else
         {
-            free(theNewString);
             reconnDebugPrint("%s: malloc(theFileString) failed %d (%s)\n", __FUNCTION__, errno, strerror(errno));
             retCode = RECONN_FAILURE;
         }
