@@ -57,7 +57,7 @@
 #define __VERSION_H
 
 #define majorLevel "00"
-#define minorLevel "07"
+#define minorLevel "p8"
 #define patchLevel "00"
 
 #define RECONN_STRING_MAX 25
