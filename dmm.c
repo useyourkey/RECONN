@@ -257,6 +257,10 @@ ReconnErrCodes dmmInit(int *fileDescriptor)
     }
     else
     {
+        /*
+         * Give the DMM time to boot
+         */
+        sleep(4);
         if((ret_status = dmmOpen(fileDescriptor)) == RECONN_SUCCESS)
         {
             // Make sure the DMM is responding
