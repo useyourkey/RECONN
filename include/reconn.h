@@ -347,7 +347,6 @@ extern int dmm_enabled;
 void * msgifcGetNewInterface(void * parentifc);
 int msgifcFreeInterface(void * interface);
 int msgifcDataIn(void * interface, void * data, unsigned int datalen);
-ReconnErrCodes receive_packet_data(int socket, unsigned char *buffer, int *length);
 void reconnReturnClientIndex(short index);
 
 #endif /* __RECONN_H */

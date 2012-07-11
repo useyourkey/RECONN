@@ -229,14 +229,14 @@ void crashHandler(int signo, siginfo_t *sigInfo, void *ptr)
     {
         for (j = 0; j < num_frames; j++)
         {
-            printf("%s\n", strings[j]);
+            crashPrint(lfp, strings[j]);
         }
         free(strings);
     }
 
 
     // Replace the signal entry point with the crash address.
-    //tracebuf[TRACE_START] = (void *)uc->uc_mcontext.arm_ip;
+    tracebuf[TRACE_START] = (void *)uc->uc_mcontext.arm_ip;
 
     crashPrintBacktrace(lfp, tracebuf, num_frames);
 

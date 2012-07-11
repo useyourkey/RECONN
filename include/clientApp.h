@@ -69,7 +69,7 @@ typedef enum
 }InsertedClientMessage;
 
 void * reconnClientTask(void *);
-ReconnErrCodes receive_packet_data(int, unsigned char *, int *);
+int receive_packet_data(int, unsigned char *, int *);
 ReconnErrCodes formatReconnPacket(int, char *, int, ReconnPacket *);
 void reconnGetEqptResponse(int , int , int, ReconnMasterClientMode);
 void insertedMasterRead(unsigned char *, int);
