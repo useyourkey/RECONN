@@ -3,7 +3,6 @@
 #include <string.h>
 #include <errno.h>
 #include <stdlib.h>
-#include <execinfo.h>
 
 #include "debugMenu.h"
 #include "reconn.h"
@@ -16,7 +15,6 @@ extern void reconnMasterIphone();
 extern int theDebugSocketFd;
 static int numberClients();
 static int upgrade();
-static int reset();
 
 #ifdef __SIMULATION__
 static int iPhoneInserted = -1;
@@ -37,7 +35,6 @@ debugMenuStruct clientDebugMenu[] =
 #endif
     {NULL, NULL, "sac", "Show the number of active client sessions", numberClients},
     {NULL, NULL, "upgrade", "Execute a software upgrade", upgrade},
-    {NULL, NULL, "reset", "reset the box", reset},
 };
 
 void registerClientDebugMenu()
@@ -93,12 +90,6 @@ static int numberClients()
     return RECONN_SUCCESS;
 }
 
-static int reset(void)
-{
-    int *i = 50;
-    *i = 0;
-    return RECONN_SUCCESS;
-}
 static int upgrade(void)
 {
     char outbuf[DEBUG_OUTPUT_LEN];

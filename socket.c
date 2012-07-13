@@ -102,6 +102,7 @@ void sendSocket(int socket_fd, unsigned char * buffer_s, int length, int num)
 void sendReconnResponse(int socket_fd, unsigned char c1, unsigned char c2, ReconnErrCodes ErrCode, ReconnMasterClientMode mode)
 {
     ReconnResponsePacket buff;
+    int length;
     ReconnResponsePacket *thePacket = &buff;
 
     memset((char *)&buff, 0 , sizeof(ReconnResponsePacket));
@@ -111,20 +112,21 @@ void sendReconnResponse(int socket_fd, unsigned char c1, unsigned char c2, Recon
     thePacket->messageId.Byte[HIGH] = c2;
     if(ErrCode == RECONN_ERROR_UNKNOWN)
     {
-         ADD_DATA_LENGTH_TO_PACKET(0, thePacket);
+        length = 0;
     }
     else
     {
-        ADD_DATA_LENGTH_TO_PACKET(1, thePacket); 
+        length = 1;
         thePacket->dataPayload[0] = ErrCode;
     }
+    ADD_DATA_LENGTH_TO_PACKET(length, thePacket);
     if(mode == INSERTEDMASTERMODE)
     {
         // Send response out the 30 pin USB 
-        libiphoned_tx((unsigned char *)thePacket, 7);
+        libiphoned_tx((unsigned char *)thePacket, RECONN_RSPPACKET_HEADER_SIZE + length);
     }
     else
     {
-        sendSocket(socket_fd, (unsigned char *)thePacket, 7, 0);
+        sendSocket(socket_fd, (unsigned char *)thePacket, RECONN_RSPPACKET_HEADER_SIZE + length, 0);
     }
 }

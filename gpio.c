@@ -181,7 +181,9 @@ ReconnErrCodes reconnGpioAction(GpioNames theGpio, GpioAction theAction, short *
             gpioPathPtr = GpioTable[theGpio].gpioValueFileName;
             if(theAction == READ)
             {
+#ifdef DEBUG_GPIO
                 reconnDebugPrint("%s: calling fopen(%s, r)\n", __FUNCTION__, gpioPathPtr);
+#endif
                 if((gpioFd = fopen(gpioPathPtr, "r")) != NULL)
                 {
                     if((theGpioValue = fgetc(gpioFd)) == EOF)

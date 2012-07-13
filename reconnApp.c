@@ -94,6 +94,10 @@ int powerMeterEnabled = FALSE;
 int analyzerEnabled = FALSE;
 int dmmEnabled = FALSE;
 
+sem_t insertedMasterSemaphore;  // This semaphore is used by reconnMasterIphone() and 
+                                // reconnClientTask(). reconClientTask posts, via this signal, 
+                                // that it has removed the current Wifi Master.
+
 static pthread_t reconnThreadIds[RECONN_MAX_NUM_CLIENTS + RECONN_NUM_SYS_TASKS];
 static int  numberOfActiveClients = 0;
 static int in_socket_fd;
@@ -218,7 +222,7 @@ static short reconnGetFreeClientIndex()
 
 void reconnReturnClientIndex(short index)
 {
-    if((index >= 0) && (index < RECONN_MAX_NUM_CLIENTS))
+    if((index > 0) && (index < RECONN_MAX_NUM_CLIENTS))
     {
         reconnThreadIds[RECONN_NUM_SYS_TASKS + index] = -1;
         numberOfActiveClients--;
@@ -263,6 +267,7 @@ void reconnMasterIphone()
         reconnDebugPrint("%s: Function Entered iphone INSERTED\n", __FUNCTION__);
         if (masterClientSocketFd != -1)
         {
+            sem_init(&insertedMasterSemaphore, 0, 0);
             reconnDebugPrint("%s: Master WiFi client is present\n", __FUNCTION__);
             // This function will usurp mastership from the current
             // master iPhone. The physically inserted iPhone is ALWAYS
@@ -275,23 +280,21 @@ void reconnMasterIphone()
             theMessage[0] = MASTER_INSERTED;
             if(mq_send(masterClientMsgQid, (const char *)&theMessage, INSERTED_MASTER_MSG_SIZE, 0) != 0)
             {
-                reconnDebugPrint("%s: mq_send(masterClientMsgQid) failed. %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+                reconnDebugPrint("%s: mq_send(%d) failed. %d(%s)\n", __FUNCTION__, errno, strerror(errno), masterClientMsgQid);
             }
             else
             {
-                reconnDebugPrint("%s: mq_send(masterClientMsgQid) success.\n", __FUNCTION__);
+                reconnDebugPrint("%s: mq_send(%d) success.\n", __FUNCTION__, masterClientMsgQid);
             }
             
             clock_gettime(CLOCK_REALTIME, &wait_time);
-            wait_time.tv_sec += 1;
+            wait_time.tv_sec += 8;
             wait_time.tv_nsec = 0;
-#if 0
-            if(mq_timedreceive(masterClientMsgQid, (char *) &theMessage, sizeof(theMessage), 0, &wait_time) != 0)
+            if(sem_timedwait(&insertedMasterSemaphore, &wait_time) != 0)
             {
-                reconnDebugPrint("%s: mq_timedreceive failed %d(%s).\r\n", __FUNCTION__, errno, strerror(errno));
+                reconnDebugPrint("%s: sem_timedwait failed %d(%s).\r\n", __FUNCTION__, errno, strerror(errno));
                 return(0);
             }
-#endif
         }
         else
         {
@@ -363,9 +366,7 @@ int main(int argc, char **argv)
     struct stat statInfo;
     struct sigaction act;
     struct ifreq ifr;
-#ifdef __SIMULATION__
     int optval = 1;
-#endif
 
     UNUSED_PARAM(argc);
     UNUSED_PARAM(argv);

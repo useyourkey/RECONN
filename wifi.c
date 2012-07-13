@@ -2,9 +2,9 @@
 //****************************************************************************** //
 // FILE:        wifi.c
 //
-// CLASSES:     
+// FUNCTION:        wifiUpdateConfFile
 //
-// DESCRIPTION: This contains interfadces used by the reconn embedded software
+// DESCRIPTION: This file contains interfaces used by the reconn embedded software
 //              to update wifi related data and hardware
 //         
 //******************************************************************************
@@ -103,49 +103,58 @@ ReconnErrCodes wifiUpdateConfFile(char *token, char *theNewValue)
     }
     else
     {
-        theFileString = (char *)malloc(size+1);
-        theNewString = (char *)malloc(size+1);
-        // get enough memory to create a command similar to " mv <sourcefile>  <destfile> NULL"
-        theCommand = (char *)malloc(strlen(WIFI_CONF_FILE_ORIG) + strlen(WIFI_CONF_FILE_NEW) + 5);
-        while((count = getline(&theFileString, &size, theFile)) > 0)
+        if((theFileString = (char *)malloc(size+1)))
         {
-            if(strncmp(theFileString, token, strlen(token)) == 0)
+            if((theNewString = (char *)malloc(size+1)))
             {
-                strcat(theNewString, token);
-                strcat(theNewString, theNewValue);
-                strcat(theNewString, "\n");
-                fwrite(theNewString, 1, strlen(theNewString), theOutFile);
+                // get enough memory to create a command similar to " mv <sourcefile>  <destfile> NULL"
+                theCommand = (char *)malloc(strlen(WIFI_CONF_FILE_ORIG) + strlen(WIFI_CONF_FILE_NEW) + 5);
+                while((count = getline(&theFileString, &size, theFile)) > 0)
+                {
+                    if(strncmp(theFileString, token, strlen(token)) == 0)
+                    {
+                        strcat(theNewString, token);
+                        strcat(theNewString, theNewValue);
+                        strcat(theNewString, "\n");
+                        fwrite(theNewString, 1, strlen(theNewString), theOutFile);
+                    }
+                    else
+                    {
+                        fwrite(theFileString, 1, strlen(theFileString), theOutFile);
+                    }
+                    memset(theFileString, 0, size+1);
+                    memset(theNewString, 0, size+1);
+                    memset(theCommand, 0, strlen(WIFI_CONF_FILE_ORIG) + strlen(WIFI_CONF_FILE_NEW) + 5);
+                }
+                if(fclose(theFile) != 0)
+                {
+                    reconnDebugPrint("%s: fclose(%s) failed %d (%s)\n", __FUNCTION__, WIFI_CONF_FILE_ORIG, errno, strerror(errno));
+                }
+                if(fclose(theOutFile) != 0)
+                {
+                    reconnDebugPrint("%s: fclose(%s) failed %d (%s)\n", __FUNCTION__, WIFI_CONF_FILE_NEW, errno, strerror(errno));
+                }
+                strcat(theCommand, "mv ");
+                strcat(theCommand, WIFI_CONF_FILE_NEW);
+                strcat(theCommand, " ");
+                strcat(theCommand, WIFI_CONF_FILE_ORIG);
+                printf("%s: calling system(%s)\n", __FUNCTION__, theCommand);
+                system(theCommand);
+                unlink(WIFI_CONF_FILE_NEW);
+                free(theFileString);
+                free(theNewString);
             }
             else
             {
-                fwrite(theFileString, 1, strlen(theFileString), theOutFile);
+                free(theFileString);
+                reconnDebugPrint("%s: malloc(theNewString) failed %d (%s)\n", __FUNCTION__, errno, strerror(errno));
+                retCode = RECONN_FAILURE;
             }
-            memset(theFileString, 0, size+1);
-            memset(theNewString, 0, size+1);
-            memset(theCommand, 0, strlen(WIFI_CONF_FILE_ORIG) + strlen(WIFI_CONF_FILE_NEW) + 5);
         }
-        if(fclose(theFile) != 0)
+        else
         {
-            reconnDebugPrint("%s: fclose(%s) failed %d (%s)\n", __FUNCTION__, WIFI_CONF_FILE_ORIG, errno, strerror(errno));
-        }
-        if(fclose(theOutFile) != 0)
-        {
-            reconnDebugPrint("%s: fclose(%s) failed %d (%s)\n", __FUNCTION__, WIFI_CONF_FILE_NEW, errno, strerror(errno));
-        }
-        strcat(theCommand, "mv ");
-        strcat(theCommand, WIFI_CONF_FILE_NEW);
-        strcat(theCommand, " ");
-        strcat(theCommand, WIFI_CONF_FILE_ORIG);
-        printf("%s: calling system(%s)\n", __FUNCTION__, theCommand);
-        system(theCommand);
-        unlink(WIFI_CONF_FILE_NEW);
-        if(theFileString)
-        {
-            free(theFileString);
-        }
-        if(theNewString)
-        {
-            free(theNewString);
+            reconnDebugPrint("%s: malloc(theFileString) failed %d (%s)\n", __FUNCTION__, errno, strerror(errno));
+            retCode = RECONN_FAILURE;
         }
     }
     return(retCode);

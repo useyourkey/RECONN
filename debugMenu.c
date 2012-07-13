@@ -80,6 +80,7 @@ static char * getInput(int theDebugSocketFd)
             enableExternalMessages = FALSE;
             close(theDebugSocketFd);
             theDebugSocketFd = -1;
+            free(line);
             return 0;
         }
         if((retCode = recv((int)theDebugSocketFd, &c, 1, 0)) <= 0)
@@ -88,6 +89,7 @@ static char * getInput(int theDebugSocketFd)
             enableExternalMessages = FALSE;
             close(theDebugSocketFd);
             theDebugSocketFd = -1;
+            free(line);
             return 0;
         }
         if(c == EOF)
@@ -242,7 +244,6 @@ void *debugMenuTask(void *argument)
                         needHelp = 1;
                         sendSocket(theDebugSocketFd, (unsigned char *)&debugPrompt, strlen(debugPrompt), 0);
                         if((inputString = getInput(theDebugSocketFd)) != 0)
-                        
                         {
                             if(activeTableEntry)
                             {

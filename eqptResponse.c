@@ -115,7 +115,10 @@ ReconnErrCodes reconnDeRegisterClientApp(short theIndex)
 #ifdef SOCKET_MUTEX
         pthread_mutex_lock(&socketMutex);
 #endif
-        close(socketIdList[theIndex]);
+        if(close(socketIdList[theIndex]) !=0)
+        {
+            reconnDebugPrint("%s: close(%d) failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+        }
         socketIdList[theIndex] = -1;
 #ifdef SOCKET_MUTEX
         pthread_mutex_lock(&socketMutex);

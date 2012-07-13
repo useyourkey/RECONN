@@ -57,7 +57,11 @@
 #define __VERSION_H
 
 #define majorLevel "00"
+<<<<<<< HEAD
 #define minorLevel "07"
+=======
+#define minorLevel "p8"
+>>>>>>> e8268624e0e87864409446d6a84c51cb33eb182b
 #define patchLevel "00"
 
 #define RECONN_STRING_MAX 25
