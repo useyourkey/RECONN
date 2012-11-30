@@ -56,7 +56,12 @@
 #ifndef __POWERMETER_H
 #define __POWERMETER_H
 
+#ifndef __SIMULATION__
 #define POWER_METER_DEV      "/dev/AvcomMeter"
+#else
+#define POWER_METER_DEV      "AvcomMeter"
+#endif
+
 #define POWER_METER_BAUD        B115200
 #define POWER_METER_DATABITS    CS8
 #define POWER_METER_STOPBITS    0
@@ -69,7 +74,13 @@
 #define POWER_METER_PARITY      0
 #define POWER_METER_COMMAND     "H\r"
 
-#define POWER_METER_SCAN_SLEEP 1
+typedef enum
+{
+    EXTRACTED,
+    INSERTED
+}PowerMeterStatus_t;
+
+#define POWER_METER_SCAN_SLEEP 500000 // micro seconds (1/2 second)
 
 ReconnErrCodes powerMeterInit(int *);
 ReconnErrCodes powerMeterWrite(unsigned char *buffer, int length);
@@ -77,6 +88,8 @@ ReconnErrCodes powerMeterRead(unsigned char *buffer, int *length);
 int pm_command_processing(unsigned char *command, int length, unsigned char *buffer,
 		int *outlength);
 int makePowerMeterOutput(unsigned char *pm_outputbuffer, int *pm_outputlength);
-extern void *powerMeterPresenceTask(void *args);
+extern void *powerMeterPresenceTask(void *);
 extern ReconnErrCodes powerMeterClose(int *fileDescriptor);
+extern ReconnErrCodes isPowerMeterPresent();
+extern int gPowerMeterDebugLevel;
 #endif /* __POWERMETER_H */

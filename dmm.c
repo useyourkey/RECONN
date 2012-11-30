@@ -1,13 +1,16 @@
 //******************************************************************************
-//****************************************************************************** //
+//******************************************************************************
 // FILE:        dmm.c
 //
 // FUNCTIONS:     
 //              dmmOpen()
 //              dmmInit()
 //              dmmWrite()
+//              dmmPowerDown()
 //              dmmRead()
 //              dmmDiags()
+//              dmmSaveConfigTask()
+//              dmmSaveConfig()
 //
 // DESCRIPTION: This is the file which contains functions to read, write and control
 //              the Digital Multi Meter
@@ -60,10 +63,12 @@
 #include <termios.h>
 #include <stdio.h>
 #include <string.h>
+#include <pthread.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <sys/types.h>
+#include <arpa/inet.h>
 
 #include "reconn.h"
 #include "dmm.h"
@@ -71,22 +76,15 @@
 #include "debugMenu.h"
 
 static int      myDmmFd = -1;
+#ifndef __SIMULATION__
 static struct   termios dmm_serial;
+#endif
 static int      dmmPortInit = FALSE;
-typedef enum 
-{
-    STATUS_COMMAND,
-    MILLI_VOLT_COMMAND,
-    VOLT_COMMAND,
-    MILLI_AMP_COMMAND,
-    AMP_COMMAND,
-    OHM_COMMAND,
-    DC_MODE_COMMAND,
-    AC_MODE_COMMAND,
-}DMM_COMMAND;
+static FILE     *theDmmConfigFilePtr = 0;
+pthread_mutex_t dmmMutex = PTHREAD_MUTEX_INITIALIZER;
 
 
-static char *dmmCommands[] = {
+char *dmmCommands[] = {
     "s", // status
     "v", // milli volt
     "V", // volt
@@ -143,13 +141,20 @@ static ReconnErrCodes diagsGetResponse(char *buffer, int length)
     struct timeval waitTime;
     ReconnErrCodes retCode = RECONN_SUCCESS;
     int err, amountRead, count = 0;
+#ifdef DEBUG_EQPT
+    int i;
+    char *ptr;
+#endif
 
     FD_ZERO(&theFileDescriptor);
     FD_SET(myDmmFd, &theFileDescriptor);
 
     waitTime.tv_sec = 0;
-    waitTime.tv_usec = 300000;
+    waitTime.tv_usec = DMM_WAIT_TIME;
 
+#ifdef DEBUG_EQPT
+    reconnDebugPrint("\n%s: Function Entered length = %d\n",__FUNCTION__, length);
+#endif
     do
     {
         if((err = select(myDmmFd+1, &theFileDescriptor, NULL, NULL, &waitTime)) == -1)
@@ -160,14 +165,14 @@ static ReconnErrCodes diagsGetResponse(char *buffer, int length)
         }
         else if(err == 0)
         {
-            reconnDebugPrint("%s: select timed out. Count = %d\n",__FUNCTION__, count);
+            reconnDebugPrint("%s: >>>>>>>>>>>>>>>>>>>>  select timed out. Count = %d\n",__FUNCTION__, count);
             retCode = (count) ? RECONN_SUCCESS: RECONN_FAILURE;
             break;
         }
         else
         {
 #ifdef DEBUG_EQPT
-            reconnDebugPrint("%s:\n\n********************* select returned\n",__FUNCTION__);
+            reconnDebugPrint("%s: ********************* select returned\n",__FUNCTION__);
 #endif
             if(FD_ISSET(myDmmFd,  &theFileDescriptor))
             {
@@ -181,14 +186,56 @@ static ReconnErrCodes diagsGetResponse(char *buffer, int length)
                     retCode = RECONN_FAILURE;
                     break;
                 }
+#ifdef DEBUG_EQPT
+                reconnDebugPrint("%s: amount read is %d\n", __FUNCTION__, amountRead);
+#endif
                 count += amountRead;
             }
         }
     }while(count < length);
 #ifdef DEBUG_EQPT
-    reconnDebugPrint("%s:returning %d\n",__FUNCTION__, retCode);
+    reconnDebugPrint("%s: buffer is ", __FUNCTION__);
+    for(i = 0, ptr = buffer; i < count; i++, ptr++)
+    {
+        reconnDebugPrint("%c", *ptr);
+    }
+    reconnDebugPrint("\n");
+    for(i = 0, ptr = buffer; i < count; i++, ptr++)
+    {
+        reconnDebugPrint("0x%x ", *ptr);
+    }
+    reconnDebugPrint("\n");
+    reconnDebugPrint("%s:returning %s\n",__FUNCTION__, (retCode == RECONN_FAILURE) ? "FAILURE": "SUCCESS");
 #endif
     return (retCode);
+}
+//*************************************************************************************
+//*************************************************************************************
+// FUNCTION:        dmmPowerDown
+//
+// DESCRIPTION: This function is called to power down the DMM.
+//
+// Parameters:
+//              fileDescriptor -    a pointer that this function initializes with either
+//                                  NULL or the DMM's file descriptor.
+//
+//*************************************************************************************
+ReconnErrCodes dmmPowerDown()
+{
+    ReconnErrCodes retCode;
+
+    if((retCode = reconnGpioAction(DMM_POWER_GPIO, DISABLE, NULL)) == RECONN_SUCCESS)
+    {
+        close(myDmmFd);
+        myDmmFd = -1;
+        gEqptDescriptors.dmmFd = -1;
+        dmmPortInit = FALSE;
+    }
+    else
+    {
+        reconnDebugPrint("%s: reconnGpioAction(DMM_POWER_GPIO, ENABLE, NULL) failed. \n", __FUNCTION__);
+    }
+    return(retCode);
 }
 //*************************************************************************************
 //*************************************************************************************
@@ -202,6 +249,7 @@ static ReconnErrCodes diagsGetResponse(char *buffer, int length)
 //                                  NULL or the DMM's file descriptor.
 //
 //*************************************************************************************
+#ifndef __SIMULATION__
 static ReconnErrCodes dmmOpen (int *fileDescriptor)
 {
     ReconnErrCodes RetCode = RECONN_SUCCESS;
@@ -231,6 +279,7 @@ static ReconnErrCodes dmmOpen (int *fileDescriptor)
     }
     return (RetCode);
 }
+#endif
 
 //*************************************************************************************
 //*************************************************************************************
@@ -245,74 +294,101 @@ static ReconnErrCodes dmmOpen (int *fileDescriptor)
 //*************************************************************************************
 ReconnErrCodes dmmInit(int *fileDescriptor)
 {
-    int ret_status = 0;
-    ReconnErrCodes retcode = RECONN_SUCCESS;
-    char dmmResponse[DMM_MAX_RESPONSE];
+    ReconnErrCodes retCode = RECONN_SUCCESS;
+#ifndef __SIMULATION__
+    char dmmResponse[DMM_MAX_RESPONSE + 1];
+    short gpioState;
+#endif
     *fileDescriptor = -1;
 
-    if(reconnGpioAction(DMM_POWER_GPIO, ENABLE, NULL) == RECONN_FAILURE)
+#ifndef __SIMULATION__
+    if(reconnGpioAction(DMM_POWER_GPIO, READ, &gpioState) == RECONN_SUCCESS)
     {
-        reconnDebugPrint("%s: reconnGpioAction(DMM_POWER_GPIO, ENABLE, NULL) failed. \n", __FUNCTION__);
-        retcode = RECONN_FAILURE;
+        if(gpioState == GPIO_IS_INACTIVE)
+        {
+            if(reconnGpioAction(DMM_POWER_GPIO, ENABLE, NULL) == RECONN_FAILURE)
+            {
+                reconnDebugPrint("%s: reconnGpioAction(DMM_POWER_GPIO, ENABLE, NULL) failed. \n", __FUNCTION__);
+                retCode = RECONN_FAILURE;
+            }
+            else
+            {
+                /*
+                 * Give the DMM time to boot
+                 */
+                sleep(5);
+            }
+        }
+        if(retCode == RECONN_SUCCESS)
+        {
+            if((retCode = dmmOpen(fileDescriptor)) == RECONN_SUCCESS)
+            {
+                // Make sure the DMM is responding
+
+                reconnDebugPrint("%s: Getting status \n", __FUNCTION__);
+
+                memset(&dmmResponse, 0, DMM_MAX_RESPONSE + 1);
+                dmmWrite((unsigned char *)dmmCommands[STATUS_COMMAND], strlen(dmmCommands[STATUS_COMMAND]));
+                if(diagsGetResponse((char *)&dmmResponse, DMM_STATUS_RSP_LEN) == RECONN_FAILURE)
+                {
+                    reconnDebugPrint("%s: no Response disable GPIO %d \n", __FUNCTION__, DMM_POWER_GPIO);
+                    //power meter might be in shutdown mode. Wake it up.
+
+                    if(reconnGpioAction(DMM_POWER_GPIO, DISABLE, NULL) == RECONN_FAILURE)
+                    {
+                        reconnDebugPrint("%s: reconnGpioAction(DMM_POWER_GPIO, DISABLE, NULL) failed. \n", __FUNCTION__);
+                        retCode = RECONN_FAILURE;
+                    }
+                    usleep(50000);
+                    reconnDebugPrint("%s: ENABLE GPIO %d \n", __FUNCTION__, DMM_POWER_GPIO);
+                    if(reconnGpioAction(DMM_POWER_GPIO, ENABLE, NULL) == RECONN_FAILURE)
+                    {
+                        reconnDebugPrint("%s: reconnGpioAction(DMM_POWER_GPIO, ENABLE, NULL) failed. \n", __FUNCTION__);
+                        retCode = RECONN_FAILURE;
+                    }
+                    sleep(5);
+                }
+                else
+                {
+                    reconnDebugPrint("%s: status = %c", __FUNCTION__, dmmResponse[0]);
+                    reconnDebugPrint("%c", dmmResponse[1]);
+                    reconnDebugPrint("%c", dmmResponse[2]);
+                    reconnDebugPrint("%c\n", dmmResponse[3]);
+                }
+
+                // Clear out any queued messages
+                memset(&dmmResponse, 0 , DMM_MAX_RESPONSE);
+                while(diagsGetResponse((char *)&dmmResponse, 1) == RECONN_SUCCESS)
+                {
+                    reconnDebugPrint("%s", dmmResponse);
+                    memset(&dmmResponse, 0 , DMM_MAX_RESPONSE);
+                }
+                reconnDebugPrint("\n");
+
+                // Now set the DMM shutdown timeout value to max
+                dmmWrite((unsigned char *)DMM_MAX_SHUTDOWN, strlen(DMM_MAX_SHUTDOWN));
+
+                memset(&dmmResponse, 0 , DMM_MAX_RESPONSE);
+                usleep(50000);
+                diagsGetResponse((char *)&dmmResponse, DMM_MAX_RESPONSE);
+                if(strncmp((char *)&dmmResponse, DMM_SHUTDOWN_RESP, DMM_MAX_RESPONSE))
+                {
+                    reconnDebugPrint("%s: setting timeout value failed. Value set was%sand value read was%s value should be %s\n", __FUNCTION__, DMM_MAX_SHUTDOWN, dmmResponse, DMM_SHUTDOWN_RESP);
+                }
+                dmmLoadSavedConfig();
+                dmmPortInit = TRUE;
+            }
+        }
     }
     else
     {
-        /*
-         * Give the DMM time to boot
-         */
-        sleep(4);
-        if((ret_status = dmmOpen(fileDescriptor)) == RECONN_SUCCESS)
-        {
-            // Make sure the DMM is responding
-
-            reconnDebugPrint("%s: Getting status \n", __FUNCTION__);
-
-            dmmWrite((unsigned char *)dmmCommands[STATUS_COMMAND], strlen(dmmCommands[STATUS_COMMAND]));
-            if(diagsGetResponse((char *)&dmmResponse, DMM_MAX_RESPONSE) == RECONN_FAILURE)
-            {
-                reconnDebugPrint("%s: no Response disable GPIO %d \n", __FUNCTION__, DMM_POWER_GPIO);
-                //power meter might be in shutdown mode. Wake it up.
-                if(reconnGpioAction(DMM_POWER_GPIO, DISABLE, NULL) == RECONN_FAILURE)
-                {
-                    reconnDebugPrint("%s: reconnGpioAction(DMM_POWER_GPIO, DISABLE, NULL) failed. \n", __FUNCTION__);
-                    retcode = RECONN_FAILURE;
-                }
-                usleep(50000);
-                reconnDebugPrint("%s: ENABLE GPIO %d \n", __FUNCTION__, DMM_POWER_GPIO);
-                if(reconnGpioAction(DMM_POWER_GPIO, ENABLE, NULL) == RECONN_FAILURE)
-                {
-                    reconnDebugPrint("%s: reconnGpioAction(DMM_POWER_GPIO, ENABLE, NULL) failed. \n", __FUNCTION__);
-                    retcode = RECONN_FAILURE;
-                }
-                sleep(6);
-            }
-
-            // Clear out any queued messages
-            memset(&dmmResponse, 0 , DMM_MAX_RESPONSE);
-            while(diagsGetResponse((char *)&dmmResponse, DMM_MAX_RESPONSE) == RECONN_SUCCESS)
-            {
-                reconnDebugPrint("%s", dmmResponse);
-                memset(&dmmResponse, 0 , DMM_MAX_RESPONSE);
-            }
-            reconnDebugPrint("\n");
-
-            // Now set the DMM shutdown timeout value to max
-            dmmWrite((unsigned char *)DMM_MAX_SHUTDOWN, strlen(DMM_MAX_SHUTDOWN));
-            memset(&dmmResponse, 0 , DMM_MAX_RESPONSE);
-            diagsGetResponse((char *)&dmmResponse, DMM_MAX_RESPONSE);
-            if(strncmp((char *)&dmmResponse, DMM_SHUTDOWN_RESP, DMM_MAX_RESPONSE))
-            {
-                reconnDebugPrint("%s: setting timeout value failed. Value set was %sand value read was%s value should be %s\n", __FUNCTION__, DMM_MAX_SHUTDOWN, dmmResponse, DMM_SHUTDOWN_RESP);
-            }
-
-            dmmPortInit = TRUE;
-        }
-        else
-        {
-            retcode = RECONN_FAILURE;
-        }
+        reconnDebugPrint("%s: GPIO_174, READ) failed \n", __FUNCTION__);
+        retCode = RECONN_FAILURE;
     }
-    return (retcode);
+#else
+    dmmPortInit = TRUE;
+#endif
+    return (retCode);
 }
 
 //*************************************************************************************
@@ -328,15 +404,34 @@ ReconnErrCodes dmmInit(int *fileDescriptor)
 ReconnErrCodes dmmWrite (unsigned char *buffer, int length)
 {
     ReconnErrCodes RetCode = RECONN_SUCCESS;
-   if (dmmPortInit == FALSE)
-   {
-      RetCode = RECONN_DMM_PORT_NOT_INITIALIZED;
-   }
-   else
-   {
-       write (myDmmFd, buffer, length);
-   }
-   return (RetCode);
+    int bytesWritten;
+#if 0
+    int i;
+    unsigned char *ptr = buffer;
+#endif
+
+    if (dmmPortInit == FALSE)
+    {
+        RetCode = RECONN_DMM_PORT_NOT_INITIALIZED;
+    }
+    else
+    {
+#if 0
+        reconnDebugPrint("%s: writing ", __FUNCTION__);
+        for(i = 0; i < length; i++, ptr++)
+        {
+            reconnDebugPrint("%c", *ptr);
+        }
+        reconnDebugPrint("\n");
+#endif 
+        bytesWritten = write (myDmmFd, buffer, length);
+        if((bytesWritten != length) || (bytesWritten < 0))
+        {
+            reconnDebugPrint("%s: write failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+            RetCode = RECONN_FAILURE;
+        }
+    }
+    return (RetCode);
 }
 
 //*************************************************************************************
@@ -350,15 +445,20 @@ ReconnErrCodes dmmWrite (unsigned char *buffer, int length)
 //              length -    The data length 
 //
 //*************************************************************************************
-ReconnErrCodes dmmRead (unsigned  char *buffer, int *length)
+ReconnErrCodes dmmRead (unsigned char *buffer, int *length)
 {
    int       NumberBytes = 0;
-   ReconnErrCodes RetCode = RECONN_SUCCESS;
+   ReconnErrCodes retCode = RECONN_SUCCESS;
+#if 0
+       int i;
+       unsigned char *ptr = buffer;
+#endif
+
 
    if (dmmPortInit == FALSE)
    {
       reconnDebugPrint ("%s: DMM Port not initialized \n\r", __FUNCTION__);
-      RetCode = RECONN_FAILURE;
+      retCode = RECONN_DMM_PORT_NOT_INITIALIZED;
    }
    else
    {
@@ -366,9 +466,21 @@ ReconnErrCodes dmmRead (unsigned  char *buffer, int *length)
        if((NumberBytes = read (myDmmFd, buffer, 2044)) > 0)
        {
            *length = NumberBytes;
+#if 0
+           reconnDebugPrint("%s: read %d bytes ", __FUNCTION__, NumberBytes);
+           for(i = 0; i < NumberBytes; i++, ptr++)
+           {
+               reconnDebugPrint("%c", *ptr);
+           }   
+           reconnDebugPrint("\n");
+#endif
+       }
+       else
+       {
+           retCode = RECONN_FAILURE;
        }
    }
-   return (RetCode);
+   return (retCode);
 }
 
 
@@ -387,7 +499,7 @@ ReconnErrCodes dmmDiags()
     ReconnErrCodes retCode = RECONN_SUCCESS;
     char dmmResponse[DMM_MAX_RESPONSE];
     int dummyFd;
-    int j, i;
+    int voltageMode, i;
 
     if(myDmmFd == -1)
     {
@@ -407,22 +519,34 @@ ReconnErrCodes dmmDiags()
         // So, power it back up and try to talk to the device.
         //
 
-        for(j = DC_MODE_COMMAND; j <= AC_MODE_COMMAND; j++)
+        for(voltageMode = DC_MODE_COMMAND; voltageMode <= AC_MODE_COMMAND; voltageMode++)
         {
 #ifdef DEBUG_EQPT
-            reconnDebugPrint("%s: sending %s\n", __FUNCTION__, dmmCommands[j]);
+            reconnDebugPrint("%s: sending %s\n", __FUNCTION__, dmmCommands[voltageMode]);
 #endif
-            if((retCode = dmmWrite((unsigned char *)dmmCommands[j], strlen((char *)dmmCommands[j]))) != RECONN_SUCCESS)
+            if((retCode = dmmWrite((unsigned char *)dmmCommands[voltageMode], strlen((char *)dmmCommands[voltageMode]))) != RECONN_SUCCESS)
             {
                 reconnDebugPrint("%s: dmmWrite(%s, %d) failed\n", __FUNCTION__, dmmCommands[i], strlen(dmmCommands[i]));
             }
             else
             {
                 memset(&dmmResponse, 0 , DMM_MAX_RESPONSE);
-                diagsGetResponse((char *)&dmmResponse, DMM_MAX_RESPONSE);
+                /*
+                 * Give the meter a chance to process the command before getting the response
+                 */
+                usleep(DMM_WAIT_TIME);
+
+                /*
+                 * Currently the redfish firmware on the DMM does not echo back "a" when commanded
+                 * so skip looking for a response when switching to AC mode.
+                 */
+                if(voltageMode == DC_MODE_COMMAND)
+                {
+                    diagsGetResponse((char *)&dmmResponse, 1);
 #ifdef DEBUG_EQPT
-                reconnDebugPrint("%s: received %s\n", __FUNCTION__, dmmResponse);
+                    reconnDebugPrint("%s: received %s\n", __FUNCTION__, dmmResponse);
 #endif
+                }
                 for(i = MILLI_VOLT_COMMAND; i <= OHM_COMMAND; i++)
                 {
 #ifdef DEBUG_EQPT
@@ -436,11 +560,15 @@ ReconnErrCodes dmmDiags()
                     else
                     {
                         memset(&dmmResponse, 0 , DMM_MAX_RESPONSE);
-                        diagsGetResponse((char *)&dmmResponse, DMM_MAX_RESPONSE);
+                        diagsGetResponse((char *)&dmmResponse, 1);
 #ifdef DEBUG_EQPT
                         reconnDebugPrint("%s: received %s\n", __FUNCTION__, dmmResponse);
                         reconnDebugPrint("%s: sending %s\n", __FUNCTION__, dmmCommands[STATUS_COMMAND]);
 #endif
+                        /*
+                         * Give the meter a chance to process the previous command before getting status.
+                         */
+                        usleep(DMM_WAIT_TIME);
                         if((retCode = dmmWrite((unsigned char *)dmmCommands[STATUS_COMMAND], strlen((char *)dmmCommands[STATUS_COMMAND]))) != RECONN_SUCCESS)
                         {
                             reconnDebugPrint("%s: dmmWrite(%s, %d) failed\n", __FUNCTION__, dmmCommands[STATUS_COMMAND], strlen(dmmCommands[STATUS_COMMAND]));
@@ -448,9 +576,9 @@ ReconnErrCodes dmmDiags()
                         else
                         {
                             memset(&dmmResponse, 0 , DMM_MAX_RESPONSE);
-                            if((retCode = diagsGetResponse((char *)&dmmResponse, DMM_MAX_RESPONSE)) != RECONN_SUCCESS)
+                            if((retCode = diagsGetResponse((char *)&dmmResponse, DMM_STATUS_RSP_LEN)) != RECONN_SUCCESS)
                             {
-                                reconnDebugPrint("%s: dmmRead() failed\n", __FUNCTION__);
+                                reconnDebugPrint("%s: diagsGetResponse() failed\n", __FUNCTION__);
                             }
                             else
                             {
@@ -459,7 +587,7 @@ ReconnErrCodes dmmDiags()
                                     reconnDebugPrint("%s: expected = %s VS response = %s Failed\n", __FUNCTION__, dmmStatusResult[i-1], dmmResponse);
                                     retCode = RECONN_FAILURE;
                                     i = OHM_COMMAND+1;
-                                    j = AC_MODE_COMMAND+1; 
+                                    voltageMode = AC_MODE_COMMAND+1; 
                                     break;
                                 }
                             }
@@ -475,3 +603,266 @@ ReconnErrCodes dmmDiags()
     return(retCode);
 }
 
+//*************************************************************************************
+//*************************************************************************************
+// FUNCTION:        dmmSaveConfigTask
+//
+// DESCRIPTION: This tasks sole responsibility is to connect to the reconnPowerDaemon and
+//              wait for a message. When the message comes in it means the user has hit the 
+//              power button and this task then gets the digital mulitimeter's current configuration
+//              and stores it in a file. This task then sends a message back to the reconnPowerDaemon
+//              informing it that the write is complete and it can power down the system.
+//
+//              Note:
+//              Under normal operating conditions this task is called at power up then
+//              blocks on the recv() call. When the power button is pushed this task is
+//              triggered, completes it job then dies. No need to loop because power is about
+//              to be removed by reconnPowerDaemon.
+// Parameters:
+//
+//*************************************************************************************
+void *dmmSaveConfigTask(void * args)
+{
+    static int retCode = 0;
+    struct sockaddr_in server_addr;
+    int bytesReceived;
+    int dmmSocketFd = -1;
+    extern YESNO swUpgradeInProgress;
+    DMM_POWER_BUTTON_MSG dmmPowerButtonMsg;
+
+    
+    UNUSED_PARAM(args); bzero((unsigned char *) &server_addr, sizeof(server_addr));
+    /* bind the socket */
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    server_addr.sin_port = htons(DMM_SOCKET_PORT);
+
+    while(swUpgradeInProgress == NO)
+    {
+        if(dmmSocketFd == -1)
+        {
+            if((dmmSocketFd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+            {
+                reconnDebugPrint("%s: socket failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+                break;
+            }
+        }
+        if(connect(dmmSocketFd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0)
+        {
+            /*
+             * PowerDaemon might not be running, so sleep for a while and try again.
+             */
+#ifndef __SIMULATION__
+            reconnDebugPrint("%s: connect failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+#endif
+            sleep(2);
+        }
+        else
+        {
+            reconnDebugPrint("%s: waiting for command from PowerDaemon\n", __FUNCTION__);
+            if((bytesReceived = recv(dmmSocketFd, &(dmmPowerButtonMsg.theMessage), sizeof(dmmPowerButtonMsg), 0)) > 0)
+            {
+                reconnDebugPrint("%s: received command from PowerDaemon\n", __FUNCTION__);
+
+                if(dmmPowerButtonMsg.theMessage == SAVE_DMM_STATE)
+                {
+                    dmmSaveConfig();
+                    reconnDebugPrint("%s: sending reply to PowerDaemon\n", __FUNCTION__);
+
+                    dmmPowerButtonMsg.theMessage = DMM_SAVE_COMPLETE;
+                    send(dmmSocketFd, &(dmmPowerButtonMsg.theMessage), sizeof(dmmPowerButtonMsg), 0);
+                }
+                else
+                {
+                    reconnDebugPrint("%s: Invalid message received %d\n", __FUNCTION__, dmmPowerButtonMsg.theMessage);
+                }
+            }
+            else if(bytesReceived == 0)
+            {
+                reconnDebugPrint("%s: PowerDaemon closed the socket.\n", __FUNCTION__);
+                if(shutdown(dmmSocketFd, SHUT_RDWR) != 0)
+                {
+                    reconnDebugPrint("%s: shutdown(%d ,SHUT_RDWR) failed %d (%s)\n", __FUNCTION__, 
+                            dmmSocketFd, errno, strerror(errno));
+                }
+                if(close(dmmSocketFd) != 0)
+                {
+                    reconnDebugPrint("%s: close(%d) failed %d (%s)\n", __FUNCTION__, dmmSocketFd, 
+                            errno, strerror(errno));
+                }
+                dmmSocketFd = -1;
+            }
+            else
+            {
+                /*
+                 * Something happened to the socket try to reconnect
+                 */
+                close(dmmSocketFd);
+                reconnDebugPrint("%s: recv returned %d (%s) \n", __FUNCTION__, errno, strerror(errno));
+                sleep(2);
+            }
+        }
+    }
+    return (&retCode);
+}
+//*************************************************************************************
+//*************************************************************************************
+// FUNCTION:        dmmLoadSavedConfig
+//
+// DESCRIPTION: This function is used to load the DMM with the stored configuration
+//
+// Parameters:
+//
+//*************************************************************************************
+void dmmLoadSavedConfig()
+{
+    char dmmResponse[DMM_MAX_RESPONSE + 1];
+    char theConfigString[DMM_MAX_RESPONSE + 1];
+    size_t amountRead;
+
+    /*
+     * Read the config file and set the meter accordingly. If there is not config file, no big deal. 
+     * One will be written when the reconn unit is powered down.
+     */
+    reconnDebugPrint("%s: Function Entered\n", __FUNCTION__);
+    if((theDmmConfigFilePtr = fopen(DMM_CONFIG_FILE_NAME, "r")) == NULL)
+    {
+        if(errno != ENOENT)
+        {
+            reconnDebugPrint("%s: fopen(%s, r) failed %d(%s)\n", __FUNCTION__, DMM_CONFIG_FILE_NAME, errno, strerror(errno));
+        }
+        else
+        {
+            /*
+             * File not found is a valid condition.
+             */
+        }
+    }
+    else
+    {
+        // Clear out any queued messages
+        memset(&dmmResponse, 0 , DMM_MAX_RESPONSE + 1);
+        while(diagsGetResponse((char *)&dmmResponse, 1) == RECONN_SUCCESS)
+        {
+            reconnDebugPrint("%s", dmmResponse);
+            memset(&dmmResponse, 0 , DMM_MAX_RESPONSE);
+        }
+        reconnDebugPrint("\n");
+
+        memset(&theConfigString, 0, DMM_MAX_RESPONSE + 1);
+        /*
+         * The config file only holds 2 bytes of config data.
+         */
+        if((amountRead = fread(&theConfigString, 1, DMM_NUM_CONFIG_BYTES, theDmmConfigFilePtr)) == DMM_NUM_CONFIG_BYTES)
+        {
+            if(dmmWrite((unsigned char *)&theConfigString[0], 1) == RECONN_SUCCESS)
+            {
+                usleep(DMM_WAIT_TIME);
+                memset(&dmmResponse, 0, DMM_MAX_RESPONSE + 1);
+                if(diagsGetResponse((char *)&dmmResponse, 1) == RECONN_SUCCESS)
+                {
+                    if(dmmWrite((unsigned char *)&theConfigString[1], 1) == RECONN_SUCCESS)
+                    { 
+                        usleep(DMM_WAIT_TIME);
+                        memset(&dmmResponse, 0, DMM_MAX_RESPONSE + 1);
+                        if(diagsGetResponse((char *)&dmmResponse, 1) == RECONN_FAILURE)
+                        {
+                            reconnDebugPrint("%s: diagsGetResponse() byte 1 failed\n", __FUNCTION__);
+                        }
+                    }
+                    else
+                    {
+                        reconnDebugPrint("%s: dmmWrite() byte 1 failed\n", __FUNCTION__);
+                    }
+                }
+                else
+                {
+                    reconnDebugPrint("%s: diagsGetResponse() byte 0 failed\n", __FUNCTION__);
+                }
+            }
+            else
+            {
+                reconnDebugPrint("%s: dmmWrite() byte 0 failed\n", __FUNCTION__);
+            }
+        }
+        else if(amountRead != DMM_NUM_CONFIG_BYTES)
+        {
+            reconnDebugPrint("%s: fread(%s) returned %d \n", __FUNCTION__, DMM_CONFIG_FILE_NAME, amountRead);
+        }
+        else
+        {
+            reconnDebugPrint("%s: fread(%s) failed %d(%s)\n", __FUNCTION__, DMM_CONFIG_FILE_NAME, errno ,strerror(errno));
+        }
+        fclose(theDmmConfigFilePtr);
+    }
+    reconnDebugPrint("%s: Function exiting \n", __FUNCTION__);
+}
+//*************************************************************************************
+//*************************************************************************************
+// FUNCTION:        dmmSaveConfig
+//
+// DESCRIPTION: This function is used to load the DMM with the stored configuration
+//
+// Parameters:
+//
+//*************************************************************************************
+void dmmSaveConfig()
+{
+    char dmmResponse[DMM_MAX_RESPONSE];
+    int bytesWritten;
+
+    unlink(DMM_CONFIG_FILE_NAME);
+    if((theDmmConfigFilePtr = fopen(DMM_CONFIG_FILE_NAME, "w")) == NULL)
+    {
+        reconnDebugPrint("%s: fopen(%s, w) failed %d(%s)\n", __FUNCTION__, DMM_CONFIG_FILE_NAME, errno, strerror(errno));
+    } 
+    else 
+    { 
+        memset(&dmmResponse, 0, DMM_MAX_RESPONSE + 1); 
+        pthread_mutex_lock(&dmmMutex); 
+        if(dmmWrite((unsigned char *)dmmCommands[STATUS_COMMAND], strlen(dmmCommands[STATUS_COMMAND])) == RECONN_SUCCESS) 
+        { 
+            if(diagsGetResponse((char *)&dmmResponse, DMM_STATUS_RSP_LEN) == RECONN_SUCCESS) 
+            { 
+                reconnDebugPrint("%s: writing ", __FUNCTION__); 
+                reconnDebugPrint("%c ", dmmResponse[0]); 
+                reconnDebugPrint("%c ", dmmResponse[1]); 
+                reconnDebugPrint("%c ", dmmResponse[2]); 
+                reconnDebugPrint("%c ", dmmResponse[3]); 
+                reconnDebugPrint("%c ", dmmResponse[4]); 
+                reconnDebugPrint("\n "); 
+                /* 
+                 * Only the first 2 bytes mean anything.  
+                 * byte 1 = input mode (Voltage, Current, Resistance) 
+                 * byte 2 = AC or DC 
+                 * byte 3 = ranging (auto or manual) 
+                 */ 
+                bytesWritten = fwrite(&dmmResponse, 1, DMM_NUM_CONFIG_BYTES, theDmmConfigFilePtr); 
+                if((bytesWritten == 0) || (bytesWritten != DMM_NUM_CONFIG_BYTES)) 
+                { 
+                    reconnDebugPrint("%s: fwrite() failed %d(%s)\n", __FUNCTION__, errno, strerror(errno)); 
+                } 
+            } 
+            else 
+            { 
+                reconnDebugPrint("%s: diagsGetResponse failed\n", __FUNCTION__); 
+            } 
+        } 
+        else 
+        { 
+            reconnDebugPrint("%s: dmmWrite() failed\n", __FUNCTION__); 
+        } 
+        if(fflush(theDmmConfigFilePtr) != 0) 
+        { 
+            reconnDebugPrint("%s: fflush() failed %d(%s)\n", __FUNCTION__, errno, strerror(errno)); 
+        } 
+        if(fsync(fileno(theDmmConfigFilePtr)) != 0){ 
+            reconnDebugPrint("%s: fsync() failed %d(%s)\n", __FUNCTION__, errno, strerror(errno)); 
+        } 
+        if(fclose(theDmmConfigFilePtr) != 0)
+        {
+            reconnDebugPrint("%s: fclose() failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+        }
+        pthread_mutex_unlock(&dmmMutex);
+    }
+}

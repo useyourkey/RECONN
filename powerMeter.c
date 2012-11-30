@@ -61,12 +61,15 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <string.h>
+#include <net/if.h>
 
 #include "reconn.h"
 #include "powerMeter.h"
+#include "eqptResponse.h"
 #include "gpio.h"
 #include "debugMenu.h"
 #include "socket.h"
+#include "libiphoned.h"
 
 int myMeterFd;
 struct termios meterSerial;
@@ -74,29 +77,54 @@ struct termios meterSerial;
 int pm_wait_flag = TRUE;
 static int PowerMeterPortInit = FALSE;
 
+//******************************************************************************
+//******************************************************************************
+// FUNCTION:        powerMeterClose
+//
+// DESCRIPTION: This function is called to close the power meter file descriptor
+//
+//  PARAMETERS: fileDescriptor - pointer to the power meter filedescriptor.
+//
+//******************************************************************************
 ReconnErrCodes powerMeterClose(int *fileDescriptor)
 {
+    ReconnErrCodes retCode = RECONN_SUCCESS;
 #ifdef DEBUG_EQPT
     reconnDebugPrint("%s: Function Entered\n", __FUNCTION__);
 #endif
-    if(fileDescriptor != -1)
-    {
-        close(fileDescriptor);
-        PowerMeterPortInit = FALSE;
-        *fileDescriptor = -1;
-        return RECONN_SUCCESS;
-    }
-    else
+    if(fileDescriptor == NULL)
     {
         reconnDebugPrint("%s: bad fileDescriptor %d\n", __FUNCTION__, fileDescriptor);
-        return RECONN_FAILURE;
+        retCode = RECONN_INVALID_PARAMETER;
     }
+    else if(*fileDescriptor != -1)
+    {
+        if(close(*fileDescriptor) != 0)
+        {
+            reconnDebugPrint("%s: close(%d) failed %d (%s)\n", __FUNCTION__, *fileDescriptor, 
+                    errno, strerror(errno));
+        }
+        PowerMeterPortInit = FALSE;
+        *fileDescriptor = -1;
+    }
+    return(retCode);
 }
+
+//******************************************************************************
+//******************************************************************************
+// FUNCTION:        powerMeterOpen
+//
+// DESCRIPTION: Static function used to open communication to the power meter.
+//
+//  PARAMETERS: fileDescriptor - pointer to the power meter filedescriptor.
+//
+//******************************************************************************
+#ifndef __SIMULATION__
 static ReconnErrCodes powerMeterOpen(int *fileDescriptor) 
 {
     ReconnErrCodes retCode = RECONN_SUCCESS;
-    int bytesRead, dataLength = 200;
-    unsigned char meterData[dataLength];
+    int bytesRead;
+    unsigned char meterData[RECONN_RSP_PAYLOAD_SIZE];
 
     reconnDebugPrint("%s: Function Entered\n", __FUNCTION__);
     if((myMeterFd = open(POWER_METER_DEV, O_RDWR | O_NOCTTY | O_NONBLOCK)) < 0)
@@ -107,7 +135,6 @@ static ReconnErrCodes powerMeterOpen(int *fileDescriptor)
     }
     else
     {
-        *fileDescriptor = myMeterFd;
         meterSerial.c_cflag = POWER_METER_BAUD_RATE | CRTSCTS | POWER_METER_DATABITS | POWER_METER_STOPBITS
             | POWER_METER_PARITYON | POWER_METER_PARITY | CLOCAL | CREAD;
         meterSerial.c_iflag = IGNPAR;
@@ -122,35 +149,51 @@ static ReconnErrCodes powerMeterOpen(int *fileDescriptor)
         // text returned then the device at ttyUSB1 is infact a power meter and therefore we can
         // say initializationis complete.
 
-        memset(meterData, 0, dataLength);
-        reconnDebugPrint("%s: Calling write \n", __FUNCTION__);
-        write(myMeterFd, POWER_METER_COMMAND, 2);
+        memset(meterData, 0, RECONN_RSP_PAYLOAD_SIZE);
+        reconnDebugPrint("%s: writing H to meter\n", __FUNCTION__);
+        write(myMeterFd, POWER_METER_COMMAND, strlen(POWER_METER_COMMAND));
         sleep(1);
-        if((bytesRead = read(myMeterFd, &meterData, dataLength)) < 0)
+        if((bytesRead = read(myMeterFd, &meterData, RECONN_RSP_PAYLOAD_SIZE)) < 0)
         {
             reconnDebugPrint("%s: read failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+            close(myMeterFd);
             retCode = RECONN_FAILURE;
         }
         else if(strstr((const char *)&meterData, "Power Meter"))
         {
-            PowerMeterPortInit = TRUE;
             reconnDebugPrint("%s: Power Meter Init Complete\r\n", __FUNCTION__);
+            *fileDescriptor = myMeterFd;
         }
         else
         {
-            printf("%s: power meter responded bytesRead = %d (%s)\n", __FUNCTION__, bytesRead, meterData);
+            printf("%s: power meter responded bytesRead = %d %s\n", __FUNCTION__, bytesRead, (char *) &meterData);
+            close(myMeterFd);
             retCode = RECONN_FAILURE;
         }
     }
     return (retCode);
 }
+#endif
 
+//******************************************************************************
+//******************************************************************************
+// FUNCTION:        powerMeterInit
+//
+// DESCRIPTION: Function used to open initialize the power meter. This function
+//              utilizes powerMeterOpen() to do the heavy lifting.
+//
+//  PARAMETERS: fileDescriptor - pointer to the power meter filedescriptor.
+//
+//******************************************************************************
 ReconnErrCodes powerMeterInit(int *fileDescriptor)
 {
+#ifndef __SIMULATION__
     int ret_status = 0;
+#endif
     ReconnErrCodes retcode = RECONN_SUCCESS;
     *fileDescriptor = -1;
 
+#ifndef __SIMULATION__
     if((ret_status = powerMeterOpen(fileDescriptor)) == RECONN_SUCCESS)
     {
         PowerMeterPortInit = TRUE;
@@ -159,12 +202,28 @@ ReconnErrCodes powerMeterInit(int *fileDescriptor)
     {
         retcode = RECONN_FAILURE;
     }
+#endif
     return (retcode);
 }
-/* generic write to usb Power Meter */
+
+//******************************************************************************
+//******************************************************************************
+// FUNCTION:        powerMeterWrite
+//
+// DESCRIPTION: Interface called to write date to the power meter. First checks to 
+//              see if the meter is initialized before writing the data.
+//
+//  PARAMETERS: buffer - The data to be written
+//              length - The data's length
+//
+//******************************************************************************
 ReconnErrCodes powerMeterWrite(unsigned char *buffer, int length) 
 {
     ReconnErrCodes retCode = RECONN_SUCCESS;
+#if 0
+    int i;
+    unsigned char *ptr = buffer;
+#endif
 
     if (PowerMeterPortInit == FALSE) 
     {
@@ -172,18 +231,43 @@ ReconnErrCodes powerMeterWrite(unsigned char *buffer, int length)
     }
     else
     {
+#if 0
+        reconnDebugPrint("%s: writing %d bytes ", __FUNCTION__, length);
+        for(i = 0; i < length; i++, ptr++)
+        {        
+            reconnDebugPrint("%c", *ptr);
+        }            
+        reconnDebugPrint("\n");
+#endif
         write(myMeterFd, buffer, length);
     }
     return (retCode);
 }
 
-/* generic read from the usb Power Meter */
+//******************************************************************************
+//******************************************************************************
+// FUNCTION:        powerMeterRead
+//
+// DESCRIPTION: Interface called to read date from the power meter. First checks to 
+//              see if the meter is initialized before reading the data.
+//
+//  PARAMETERS: buffer - a character buffer into which this interface writes the data.
+//              length - The data's length
+//
+//******************************************************************************
 ReconnErrCodes powerMeterRead(unsigned char *buffer, int *length) 
 {
     int NumberBytes = 0;
     ReconnErrCodes retCode = RECONN_SUCCESS;
+#if 0
+    int i;
+    unsigned char *ptr = buffer;
 
-    if (PowerMeterPortInit == FALSE) {
+#endif
+
+    //reconnDebugPrint("\n%s: Function Entered\n", __FUNCTION__);
+    if (PowerMeterPortInit == FALSE) 
+    {
         retCode = RECONN_PM_PORT_NOT_INITIALIZED;
     }
     else
@@ -192,30 +276,46 @@ ReconnErrCodes powerMeterRead(unsigned char *buffer, int *length)
         if((NumberBytes = read(myMeterFd, buffer, MAX_COMMAND_INPUT)) > 0)
         {
             *length = NumberBytes;
+#if 0
+            reconnDebugPrint("%s: read %d bytes ", __FUNCTION__, NumberBytes);
+            for(i = 0; i < NumberBytes; i++, ptr++)
+            {        
+                reconnDebugPrint("%c", *ptr);
+            }            
+            reconnDebugPrint("\n");
+#endif
+
+        }
+        else
+        {
+            retCode = RECONN_FAILURE;
         }
     }
+    //reconnDebugPrint("\n%s: Function returning %d\n", __FUNCTION__, retCode);
     return (retCode);
 }
 //******************************************************************************
-//****************************************************************************** //
+//******************************************************************************
 // FUNCTION:        powerMeterPresenceTask
 //
-// DESCRIPTION: This functions sole purpose is to detect the insertion or extraction
-//              of the power meter then notify the master client of the event. 
+// DESCRIPTION: This function's sole purpose is to detect the insertion and extraction
+//              of the power meter then notify the master client of the event via 
+//              masterClientMsgQid. 
 //
 //******************************************************************************
 void *powerMeterPresenceTask(void *args)
 {
     static int status = 0;
-    struct stat theStatus;
     int insertMessageSent = FALSE;
     int extractMessageSent = FALSE;
     int meterInserted = FALSE;
-    extern int masterClientSocketFd;
-    extern int insertedMasterSocketFd;
-    extern ReconnModeAndEqptDescriptors modeAndEqptDescriptors;
-
-    UNUSED_PARAM(args);
+    //ReconnResponsePacket theResponsePkt;
+    //ReconnResponsePacket *theResponsePktPtr = &theResponsePkt;
+    ReconnEqptDescriptors *eqptDescriptors = (ReconnEqptDescriptors *)args;
+    ReconnErrCodes retCode = RECONN_SUCCESS;
+    //extern int masterClientSocketFd;
+    //extern int insertedMasterSocketFd;
+    unsigned char theMessage[MASTER_MSG_SIZE];
 
     reconnDebugPrint("%s: ***** Started\n", __FUNCTION__);
     while(1)
@@ -223,92 +323,106 @@ void *powerMeterPresenceTask(void *args)
         /*
          * If there is a master client connected check the power meter status.
          */
-        if((masterClientSocketFd != -1)  || (insertedMasterSocketFd != -1))
+        if((retCode = isPowerMeterPresent()) == RECONN_FILE_NOT_FOUND)
         {
-            if(stat(POWER_METER_DEV, &theStatus) < 0)
+            if(meterInserted == TRUE)
             {
-                if(errno == ENOENT)
+                // The meter has been extracted
+                if(extractMessageSent == FALSE)
                 {
-                    if(meterInserted == TRUE)
+                    reconnDebugPrint("%s: Sending extract message\n", __FUNCTION__);
+
+                    memset( &theMessage, 0, MASTER_MSG_SIZE);
+                    theMessage[0] = METER_EXTRACTED;
+                    if(masterClientMsgQid != -1)
                     {
-                        // The meter has been extracted
-                        if(extractMessageSent == FALSE)
+                        if(mq_send(masterClientMsgQid, (const char *)&theMessage, MASTER_MSG_SIZE, 0) != 0)
                         {
-                            reconnDebugPrint("%s: Sending extract message\n", __FUNCTION__);
-                            modeAndEqptDescriptors.powerMeterFd = -1;
-                            powerMeterClose(&(modeAndEqptDescriptors.powerMeterFd));
-                            if(insertedMasterSocketFd != -1)
-                            {
-                                sendReconnResponse(insertedMasterSocketFd, 
-                                        (PMETER_STATUS_NOTIF & 0xff00) >> 8,
-                                        (PMETER_STATUS_NOTIF & 0x00ff), 
-                                        0, INSERTEDMASTERMODE);
-                            }
-                            else
-                            {
-                                sendReconnResponse(masterClientSocketFd, 
-                                        (PMETER_STATUS_NOTIF & 0xff00) >> 8,
-                                        (PMETER_STATUS_NOTIF & 0x00ff), 
-                                        0, MASTERMODE);
-                            }
-                            extractMessageSent = TRUE;
-                            insertMessageSent = FALSE;
-                            meterInserted = FALSE;
-                        }
-                    }
-                }
-                else
-                {
-                    reconnDebugPrint("%s: stat(%s) failed %d (%s)\n", __FUNCTION__, POWER_METER_DEV, errno, strerror(errno));
-                }
-            }
-            else
-            {
-                /*
-                 * The meter is inserted. If a notification message has not 
-                 * been sent, send it.
-                 */
-                if(insertMessageSent == FALSE)
-                {
-                    if(powerMeterInit(&(modeAndEqptDescriptors.powerMeterFd)) == RECONN_SUCCESS)
-                    {
-                        reconnDebugPrint("%s: Sending insertion message for powerMeterFd %d\n", __FUNCTION__, modeAndEqptDescriptors.powerMeterFd);
-                        if(insertedMasterSocketFd != -1)
-                        {
-                            sendReconnResponse(insertedMasterSocketFd, 
-                                    (PMETER_STATUS_NOTIF & 0xff00) >> 8,
-                                    (PMETER_STATUS_NOTIF & 0x00ff), 
-                                    1, INSERTEDMASTERMODE);
+                            reconnDebugPrint("%s: mq_send(%d) failed. %d(%s)\n", __FUNCTION__, errno, strerror(errno), masterClientMsgQid);
                         }
                         else
                         {
-                            sendReconnResponse(masterClientSocketFd, 
-                                    (PMETER_STATUS_NOTIF & 0xff00) >> 8,
-                                    (PMETER_STATUS_NOTIF & 0x00ff), 
-                                    1, MASTERMODE);
+                            reconnDebugPrint("%s: mq_send(%d) success.\n", __FUNCTION__, masterClientMsgQid);
                         }
-                        insertMessageSent = TRUE;
-                        extractMessageSent = FALSE;
-                        meterInserted = TRUE;
                     }
-                    else
-                    {
-                        reconnDebugPrint("%s: something inserted that is not a power meter\n", __FUNCTION__);
-                    }
+                    powerMeterClose(&(eqptDescriptors->powerMeterFd));
+                    extractMessageSent = TRUE;
+                    insertMessageSent = FALSE;
+                    meterInserted = FALSE;
                 }
             }
         }
-        else
+        else if(retCode == RECONN_SUCCESS)
         {
-            insertMessageSent  = FALSE;
-            extractMessageSent = FALSE;
-            meterInserted = FALSE;
-            if(modeAndEqptDescriptors.powerMeterFd != -1)
+            /*
+             * The meter is inserted. If a notification message has not 
+             * been sent, send it.
+             */
+            if(insertMessageSent == FALSE)
             {
-                powerMeterClose(&(modeAndEqptDescriptors.powerMeterFd));
+                if(meterInserted == FALSE)
+                {
+                    reconnDebugPrint("%s: Calling powerMeterInit()\n", __FUNCTION__);
+                    retCode = powerMeterInit(&(eqptDescriptors->powerMeterFd));
+                }
+                if(retCode == RECONN_SUCCESS)
+                {
+                    reconnDebugPrint("%s: Sending insertion message for powerMeterFd %d\n", __FUNCTION__, eqptDescriptors->powerMeterFd);
+                    memset( &theMessage, 0, MASTER_MSG_SIZE);
+                    theMessage[0] = METER_INSERTED;
+                    if(masterClientMsgQid != -1)
+                    {
+                        if(mq_send(masterClientMsgQid, (const char *)&theMessage, MASTER_MSG_SIZE, 0) != 0)
+                        {
+                            reconnDebugPrint("%s: mq_send(%d) failed. %d(%s)\n", __FUNCTION__, errno, strerror(errno), masterClientMsgQid);
+                        }
+                        else
+                        {
+                            reconnDebugPrint("%s: mq_send(%d) success.\n", __FUNCTION__, masterClientMsgQid);
+                        }
+                    }
+                    insertMessageSent = TRUE;
+                    extractMessageSent = FALSE;
+                    meterInserted = TRUE;
+                }
             }
         }
-        sleep(POWER_METER_SCAN_SLEEP);
+        usleep(POWER_METER_SCAN_SLEEP);
     }
+    reconnDebugPrint("%s: ***** exiting\n", __FUNCTION__);
     return(&status);
+}
+
+//******************************************************************************
+//******************************************************************************
+// FUNCTION:        isPowerMeterPresent
+//
+// DESCRIPTION: An interface used to determine if the power meter has been inserted.
+//              The embedded software uses udev to determine when a meter has been
+//              inserted or extracted. There are rules in /etc/dev/rules.d/40-reconn-usb.rules
+//              that create a symbolic link to /dev/AvcomMeter when an Avcom Power
+//              meter is inserted into the top USB connector of the reconn back panel.
+//
+// RETURNS:     RECONN_SUCCESS          -   The meter has been inserted
+//              RECONN_FILE_NOT_FOUND   -   The meter has not been inserted.
+//              RECONN_FAILURE          -   An internal error has occured.
+//******************************************************************************
+ReconnErrCodes isPowerMeterPresent()
+{
+    ReconnErrCodes retCode = RECONN_SUCCESS;
+    struct stat theStatus;
+
+    if(stat(POWER_METER_DEV, &theStatus) < 0)
+    {
+        if(errno == ENOENT)
+        {
+            retCode = RECONN_FILE_NOT_FOUND;
+        }
+        else
+        {
+            reconnDebugPrint("%s: stat(%s) failed %d (%s)\n", __FUNCTION__, POWER_METER_DEV, errno, strerror(errno));
+            retCode = RECONN_FAILURE;
+        }
+    }
+    return (retCode);
 }

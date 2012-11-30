@@ -119,6 +119,11 @@ static void(*presencechangecallbackfn)(void) = NULL;
 
 static iphoned_monitor_state_t iphoned_monitor_state;
 
+static int packetpos = 0;
+static unsigned char *currpkt;
+static int msglen = 0;
+static int is_escaped = FALSE;
+
 static void startiphoned(void);
 static void processmsg(unsigned char *msgbuf, int len);
 static void process_msg_report_iphone_presence(unsigned char *buf);
@@ -126,7 +131,9 @@ static void process_msg_report_data(unsigned char *buf, int len);
 static void stopiphoned(void);
 static void processrx(unsigned char *inbuf, int len);
 static int getpidof(char const *process);
+#ifndef __SIMULATION__
 static int send_sock_msg(unsigned char cmdid, unsigned char *outbuf, int len);
+#endif
 static void stop_iphoned_monitor(void);
 static int start_iphoned_monitor(void);
 void *iphoned_monitor_thread(void *ptr);
@@ -149,6 +156,8 @@ static void libiphoned_log(const char *fmt, ...) {
 	vfprintf(stderr, fs, ap);
 	va_end(ap);
 	free(fs);
+#else
+        UNUSED_PARAM(fmt);
 #endif
 }
 
@@ -223,10 +232,6 @@ static void processmsg(unsigned char *msgbuf, int len) {
  */
 static void processrx(unsigned char *inbuf, int len) {
 	// persistent
-	static int packetpos = 0;
-	static unsigned char currpkt[MAXPKTLEN];
-	static int is_escaped = FALSE;
-	static int msglen = 0;
 
 	int inbufpos = 0;
 	unsigned char currbyte;
@@ -267,8 +272,14 @@ static void processrx(unsigned char *inbuf, int len) {
 				++packetpos;
 			} else if (packetpos == 2) {
 				msglen += currbyte;
-				++packetpos;
-			} else if (packetpos <= (msglen + 3)) {
+                                ++packetpos;
+                                // length complete - allocate
+                                if (currpkt != NULL) {
+                                    free(currpkt);
+                                    currpkt = NULL;
+                                }
+                                currpkt = malloc(msglen);
+                        } else if (packetpos <= (msglen + 3)) {
 				currpkt[packetpos - 3] = currbyte;
 				++packetpos;
 			}
@@ -276,6 +287,8 @@ static void processrx(unsigned char *inbuf, int len) {
 			// check for packet complete and process if complete
 			if ((packetpos > 2) && (packetpos >= (msglen + 3))) {
 				processmsg(currpkt, msglen);
+                                free(currpkt);
+                                currpkt = NULL;
 				packetpos = 0;
 			}
 		}
@@ -508,7 +521,7 @@ static void stopiphoned(void) {
  *
  * @return TRUE if iphoned socket is currently active.  FALSE otherwise.
  */
-#if 1
+#ifndef __SIMULATION__
 static int send_sock_msg(unsigned char cmdid, unsigned char *outbuf, int len) {
 	unsigned char *buf;
 	int i = 0;

@@ -56,38 +56,31 @@
 //******************************************************************************
 
 #include <stdio.h>
-#include <sys/socket.h>
 #include <arpa/inet.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
-#include <sched.h>
 #include <signal.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <pthread.h>
-#include <mqueue.h>
 #include <errno.h>
 #include <linux/if.h>
 
 #include "reconn.h"
-#include "gps.h"
 #include "powerMeter.h"
 #include "spectrum.h"
 #include "dmm.h"
-#include "socket.h"
-#include "clientApp.h"
 #include "powerMgmt.h"
 #include "eqptResponse.h"
 #include "gpio.h"
 #include "debugMenu.h"
 #include "upgrade.h"
-#include "fuel_gauge.h"
+#include "libiphoned.h"
+#include "remoteMonitor.h"
+#include "crc.h"
 
 #define COMM_DEBUG
 
 int gNewSocketFd; 
-int fromLibToClientfd;
+int fromLibToClientfd = -1;
 
 int gpsEnabled = FALSE;
 int powerMeterEnabled = FALSE;
@@ -98,14 +91,9 @@ sem_t insertedMasterSemaphore;  // This semaphore is used by reconnMasterIphone(
                                 // reconnClientTask(). reconClientTask posts, via this signal, 
                                 // that it has removed the current Wifi Master.
 
-static pthread_t reconnThreadIds[RECONN_MAX_NUM_CLIENTS + RECONN_NUM_SYS_TASKS];
+pthread_t reconnThreadIds[RECONN_MAX_NUM_CLIENTS + RECONN_NUM_SYS_TASKS];
 static int  numberOfActiveClients = 0;
-static int in_socket_fd;
-ReconnModeAndEqptDescriptors modeAndEqptDescriptors;
-
-extern mqd_t masterClientMsgQid;
-static struct mq_attr masterClientMsgQAttr;
-static unsigned char theMessage[INSERTED_MASTER_MSG_SIZE];
+ReconnEqptDescriptors gEqptDescriptors;
 
 extern int masterClientSocketFd;
 extern void insertedMasterRead();
@@ -115,36 +103,122 @@ extern void registerClientDebugMenu();
 extern void registerFuelGaugeDebugMenu();
 extern void registerSystemDebugMenu();
 extern void registerSocketDebugMenu();
+extern void registerRemoteMonDebugMenu();
+extern void registerReconnMsgsMenu();
 
+#ifndef __SIMULATION__
 static void reconnCleanUp()
+#else
+void reconnCleanUp()
+#endif
 {
+    extern int MasterTransmitListenFd;
+    int i;
+
     reconnDebugPrint("%s:****** Function Called\n", __FUNCTION__);
-    reconnDebugPrint("%s:****** closing in_socket_fd\n", __FUNCTION__, in_socket_fd);
-    close(in_socket_fd);
-    reconnDebugPrint("%s:****** closing fromLibToClientfd\n", __FUNCTION__, in_socket_fd);
-    close(fromLibToClientfd);
+
+    reconnEqptCleanUp();
+    remoteMonitorCleanup();
+
+    reconnDebugPrint("%s:****** closing fromLibToClientfd\n", __FUNCTION__, fromLibToClientfd);
+    libiphoned_stop();
+    if(fromLibToClientfd != -1)
+    {
+        if(close(fromLibToClientfd) != 0)
+        {
+            reconnDebugPrint("%s: close(MasterTransmitListenFd) failed %d (%s)\n", __FUNCTION__, errno, strerror(errno));
+        }
+    }
+
+    reconnDebugPrint("%s:****** closing MasterTransmitListenFd\n", __FUNCTION__);
+    if(MasterTransmitListenFd != -1)
+    {
+        if(shutdown(MasterTransmitListenFd, SHUT_RDWR) != 0)
+        {
+            reconnDebugPrint("%s: shutdown(MasterTransmitListenFd, SHUT_RDWR) failed %d (%s)\n", __FUNCTION__, errno, strerror(errno));
+        }
+        if(close(MasterTransmitListenFd) != 0)
+        {
+            reconnDebugPrint("%s: close(MasterTransmitListenFd) failed %d (%s)\n", __FUNCTION__, errno, strerror(errno));
+        }
+    }
+
+    reconnDebugPrint("%s:****** destroying insertedMasterSemaphore\n", __FUNCTION__);
+    sem_destroy(&insertedMasterSemaphore);
+    if(gEqptDescriptors.powerMeterFd != -1)
+    {
+        reconnDebugPrint("%s:****** closing power Meter file descriptor %d\n", __FUNCTION__, gEqptDescriptors.powerMeterFd);
+        if(close(gEqptDescriptors.powerMeterFd) != 0)
+        {
+            reconnDebugPrint("%s: close(gEqptDescriptors.powerMeterFd) failed %d (%s)\n", __FUNCTION__, errno, strerror(errno));
+        }
+    }
+    if(gEqptDescriptors.analyzerFd != -1)
+    {
+        reconnDebugPrint("%s:****** closing analyzer file descriptor %d\n", __FUNCTION__, gEqptDescriptors.powerMeterFd);
+        if(close(gEqptDescriptors.analyzerFd) != 0)
+        {
+            reconnDebugPrint("%s: close(gEqptDescriptors.analyzerFd) failed %d (%s)\n", __FUNCTION__, errno, strerror(errno));
+        }
+    }
+    if(gEqptDescriptors.dmmFd != -1)
+    {
+        reconnDebugPrint("%s:****** closing DMM file descriptor %d\n", __FUNCTION__, gEqptDescriptors.powerMeterFd);
+        if(close(gEqptDescriptors.dmmFd) != 0)
+        {
+            reconnDebugPrint("%s: close(gEqptDescriptors.dmmFd) failed %d (%s)\n", __FUNCTION__, errno, strerror(errno));
+        }
+    }
+    for(i = 0; i < RECONN_MAX_NUM_CLIENTS; i++)
+    {
+        if (activeClientsList[i])
+        { 
+            reconnDebugPrint("%s:****** freeing client %d\n", __FUNCTION__, i);
+            free(activeClientsList[i]->thisContext);
+        }
+    }
+    reconnDebugPrint("\n\n%s:****** Application exiting\n", __FUNCTION__);
     exit(0);
 }
+//******************************************************************************
+//******************************************************************************
+// FUNCTION:    upgradeCheckTask
+//
+// DESCRIPTION: This task is started by main() when it detects the presence of
+//              UPGRADE_INPROGRESS_FILE_NAME. This indicates that an upgrade
+//              is in progress. This task then sleeps for UPGRADE_TASK_SLEEP_TIME.
+//              If it wakes up then the upgraded reconn-service binary is running
+//              and has not reset. We therefore determine that the upgraded binary
+//              is probably OK. So, we move the /tmp/reconn-service binary to /usr/bin
+//              which makes it the new executable. 
+//******************************************************************************
 static void *upgradeCheckTask(void *args)
 {
+    char command[FILENAME_SIZE];
     reconnDebugPrint("%s:****** Task Started\n", __FUNCTION__);
-    sleep(20);
+    sleep(UPGRADE_TASK_SLEEP_TIME);
 
     UNUSED_PARAM(args);
-    system("killall powerLedFlash");
-    reconnGpioAction(POWER_LED_GPIO, ENABLE, NULL);
+    memset(command, 0, FILENAME_SIZE);
+
     reconnDebugPrint("%s:****** Removing %s\n", __FUNCTION__, UPGRADE_INPROGRESS_FILE_NAME);
-    unlink(UPGRADE_INPROGRESS_FILE_NAME);
     unlink(UPGRADE_BUNDLE_NAME);
+    strcat(command, "mv /tmp/reconn-service /usr/bin/");
+    reconnDebugPrint("%s:****** %s)\n", __FUNCTION__, command);
+    if(system(command) != 0)
+    {
+        reconnDebugPrint("%s: system(%s) failed.\n", __FUNCTION__, command);
+    }
     return(0);
 }
 
-static void PeripheralInit(ReconnModeAndEqptDescriptors *modeEqptDescriptors) 
+static void PeripheralInit() 
 {
     int status = RECONN_SUCCESS;
 
+    gEqptDescriptors.powerMeterFd = -1;
 #if 0 // GPS has been removed from the reconn box
-    if((status = gpsInit(&(modeEqptDescriptors->gpsFd))) != RECONN_SUCCESS)
+    if((status = gpsInit(&(gEqptDescriptors.gpsFd))) != RECONN_SUCCESS)
     {
         reconnDebugPrint("%s: GPS Init Failed\n", __FUNCTION__);
         gpsEnabled = FALSE;
@@ -156,7 +230,7 @@ static void PeripheralInit(ReconnModeAndEqptDescriptors *modeEqptDescriptors)
     /* end GPS Init - GPS now configured */
 #endif
 
-    if((status = SpectrumAnalyzerInit(&(modeEqptDescriptors->analyzerFd))) != RECONN_SUCCESS) 
+    if((status = SpectrumAnalyzerInit(&(gEqptDescriptors.analyzerFd))) != RECONN_SUCCESS) 
     {
         reconnDebugPrint("Spectrum Analyzer Init Failed\n");
         analyzerEnabled = FALSE;
@@ -166,17 +240,7 @@ static void PeripheralInit(ReconnModeAndEqptDescriptors *modeEqptDescriptors)
         reconnDebugPrint("Spectrum Analyzer Initialized\n");
     }
 
-    /* initialize the power meter */
-    if ((status = powerMeterInit(&(modeEqptDescriptors->powerMeterFd))) != RECONN_SUCCESS)
-    {
-        reconnDebugPrint("Power Meter Init Failed\n");
-        powerMeterEnabled = FALSE;
-    } 
-    else 
-    {
-        reconnDebugPrint("Power Meter Initialized\n");
-    }
-    if((status = dmmInit(&(modeEqptDescriptors->dmmFd))) != RECONN_SUCCESS)
+    if((status = dmmInit(&(gEqptDescriptors.dmmFd))) != RECONN_SUCCESS)
     {
         reconnDebugPrint("%s: DMM Init Failed\n", __FUNCTION__);
         dmmEnabled = FALSE;
@@ -196,36 +260,98 @@ static void PeripheralInit(ReconnModeAndEqptDescriptors *modeEqptDescriptors)
     }
 }
 
-static short reconnGetFreeClientIndex()
+//******************************************************************************
+//******************************************************************************
+// FUNCTION:    reconnGetFreeClientIndex
+//
+// DESCRIPTION: This function returns a free client index if one is available.
+//              
+//
+//******************************************************************************
+ReconnErrCodes reconnGetFreeClientIndex(short *theIndex)
 {
-    short retCode = -1;
+    ReconnErrCodes retCode = RECONN_FAILURE;
     int i;
 
-    if(numberOfActiveClients < RECONN_MAX_NUM_CLIENTS)
+    if(theIndex == NULL)
     {
-        // The 0th element is reserved for the inserted iphone master
-        for (i = 1; i < RECONN_MAX_NUM_CLIENTS; i++)
+        reconnDebugPrint("%s: theIndex is NULL\n", __FUNCTION__);
+    }
+    else if(numberOfActiveClients < RECONN_MAX_NUM_CLIENTS)
+    {
+        /*
+         * Currently only the inserted iphone master can request
+         * an index and it must be 0. Any other value is overwritten
+         * with the next available index.
+         */
+            
+        if(*theIndex == 0)
         {
-            if(reconnThreadIds[RECONN_NUM_SYS_TASKS + i] == (pthread_t)-1)
-                break;
+#ifdef DEBUG_MUTEX
+            reconnDebugPrint("%s: Calling pthread_mutex_lock(&clientListMutex) %d %d %d\n", __FUNCTION__, clientListMutex.__data.__lock, clientListMutex.__data.__count, clientListMutex.__data.__owner);
+#endif
+
+            pthread_mutex_lock(&clientListMutex); 
+            numberOfActiveClients++;
+            activeClientsList[0] = (CLIENTCONTEXT *)1;
+            retCode = RECONN_SUCCESS;
+#ifdef DEBUG_MUTEX
+            reconnDebugPrint("%s: Calling pthread_mutex_unlock(&clientListMutex) %d %d %d\n", __FUNCTION__, clientListMutex.__data.__lock, clientListMutex.__data.__count, clientListMutex.__data.__owner);
+#endif
+
+            pthread_mutex_unlock(&clientListMutex); 
         }
-        retCode = i;
-        numberOfActiveClients++;
+        else
+        {
+#ifdef DEBUG_MUTEX
+            reconnDebugPrint("%s: Calling pthread_mutex_lock(&clientListMutex) %d %d %d\n", __FUNCTION__, clientListMutex.__data.__lock, clientListMutex.__data.__count, clientListMutex.__data.__owner);
+#endif
+
+            pthread_mutex_lock(&clientListMutex); 
+            for (i = 1; i < RECONN_MAX_NUM_CLIENTS; i++)
+            {
+                if(activeClientsList[i] == 0)
+                {
+                    *theIndex = i;
+                    /*
+                     * Setting the activeClientsList location reserves it 
+                     * which will be overwritten when the client registers
+                     */
+                    activeClientsList[i] = (CLIENTCONTEXT *)1;
+                    numberOfActiveClients++;
+                    retCode = RECONN_SUCCESS;
+                    break;
+                }
+            }
+#ifdef DEBUG_MUTEX
+            reconnDebugPrint("%s: Calling pthread_mutex_unlock(&clientListMutex) %d %d %d\n", __FUNCTION__, clientListMutex.__data.__lock, clientListMutex.__data.__count, clientListMutex.__data.__owner);
+#endif
+            pthread_mutex_unlock(&clientListMutex);
+        }
     }
     else
     {
         reconnDebugPrint("%s: numberOfActiveClients ==  %d\n", __FUNCTION__, numberOfActiveClients);
     }
-    reconnDebugPrint("%s: returning %d\n", __FUNCTION__, retCode);
+    reconnDebugPrint("%s: returning %s\n", __FUNCTION__, (retCode == RECONN_SUCCESS) ? "RECONN_SUCCESS": "FAILURE");
     return retCode;
 }
 
+//******************************************************************************
+//******************************************************************************
+// FUNCTION:    reconnReturnClientIndex
+//
+// DESCRIPTION: This function is used to return a client's index.  The index
+//              being returned was given by a call to reconnGetFreeClientIndex().
+//
+//******************************************************************************
 void reconnReturnClientIndex(short index)
 {
-    if((index > 0) && (index < RECONN_MAX_NUM_CLIENTS))
+    if(index < RECONN_MAX_NUM_CLIENTS)
     {
         reconnThreadIds[RECONN_NUM_SYS_TASKS + index] = -1;
         numberOfActiveClients--;
+        reconnDebugPrint("%s: client index %d returned numberOfActiveClients ==  %d\n", __FUNCTION__, index, numberOfActiveClients);
     }
     else
     {
@@ -238,7 +364,7 @@ extern void initReconnCrashHandlers(void);
 #endif
 
 //******************************************************************************
-//****************************************************************************** //
+//******************************************************************************
 // FUNCTION:    reconnMasterIphone
 //
 // DESCRIPTION: This function is registered with 
@@ -249,10 +375,11 @@ extern void initReconnCrashHandlers(void);
 //******************************************************************************
 void reconnMasterIphone()
 {
-    pthread_t task;
     struct timespec wait_time;
     struct sockaddr_in masterTransmitAddr;
     static int iphoneInserted = FALSE;
+    unsigned char theMessage[MASTER_MSG_SIZE];
+
 #ifdef __SIMULATION__
     int simulate_isiphonepresent();
 #endif
@@ -276,15 +403,18 @@ void reconnMasterIphone()
             // send current master a message telling it to give up control
             
             // Then start a clientApp() as master.
-            memset( &theMessage, 0, INSERTED_MASTER_MSG_SIZE);
+            memset(&theMessage, 0, MASTER_MSG_SIZE);
             theMessage[0] = MASTER_INSERTED;
-            if(mq_send(masterClientMsgQid, (const char *)&theMessage, INSERTED_MASTER_MSG_SIZE, 0) != 0)
+            if(masterClientMsgQid != -1)
             {
-                reconnDebugPrint("%s: mq_send(%d) failed. %d(%s)\n", __FUNCTION__, errno, strerror(errno), masterClientMsgQid);
-            }
-            else
-            {
-                reconnDebugPrint("%s: mq_send(%d) success.\n", __FUNCTION__, masterClientMsgQid);
+                if(mq_send(masterClientMsgQid, (const char *)&theMessage, MASTER_MSG_SIZE, 0) != 0)
+                {
+                    reconnDebugPrint("%s: mq_send(%d) failed. %d(%s)\n", __FUNCTION__, errno, strerror(errno), masterClientMsgQid);
+                }
+                else
+                {
+                    reconnDebugPrint("%s: mq_send(%d) success.\n", __FUNCTION__, masterClientMsgQid);
+                }
             }
             
             clock_gettime(CLOCK_REALTIME, &wait_time);
@@ -293,7 +423,7 @@ void reconnMasterIphone()
             if(sem_timedwait(&insertedMasterSemaphore, &wait_time) != 0)
             {
                 reconnDebugPrint("%s: sem_timedwait failed %d(%s).\r\n", __FUNCTION__, errno, strerror(errno));
-                return(0);
+                return;
             }
         }
         else
@@ -310,8 +440,8 @@ void reconnMasterIphone()
             bzero((unsigned char *) &masterTransmitAddr, sizeof(masterTransmitAddr));
 
             masterTransmitAddr.sin_family = AF_INET;
-            masterTransmitAddr.sin_addr.s_addr = INADDR_ANY;
-            masterTransmitAddr.sin_port = htons(RECONN_INCOMING_PORT+2);
+            masterTransmitAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+            masterTransmitAddr.sin_port = htons(RECONN_LIBTOCLIENT_PORT);
 
             if(connect(fromLibToClientfd, (struct sockaddr *)&masterTransmitAddr, sizeof(masterTransmitAddr)) < 0)
             {
@@ -319,34 +449,55 @@ void reconnMasterIphone()
             }
         }
 
-        gNewSocketFd = insertedMasterSocketFd;
-        // The inserted master is always client number 0
-        modeAndEqptDescriptors.clientIndex = 0;
-        modeAndEqptDescriptors.clientMode = INSERTEDMASTERMODE;
-#ifdef DEBUG_CONNECT
-        reconnDebugPrint("%s: gNewSocketFd = %d\r\n", __FUNCTION__, gNewSocketFd);
-        reconnDebugPrint("%s: Starting reconnClient index= %u \n", __FUNCTION__, modeAndEqptDescriptors.clientIndex);
-#endif
-        if(pthread_create(&task, NULL, reconnClientTask, (void *)&modeAndEqptDescriptors) < 0)
+        CLIENTCONTEXT *mem;
+        if((mem = malloc(sizeof(CLIENTCONTEXT))) != NULL)
         {
-            reconnDebugPrint("%s: Could not start reconnClient, %d %s\n", __FUNCTION__, errno, strerror(errno));
+            memset(mem, 0, sizeof(CLIENTCONTEXT));
+            mem->thisContext = (int *)mem;
+            mem->socketFd = insertedMasterSocketFd;
+            mem->eqptDescriptors = &gEqptDescriptors;
+            mem->tmpFd = (FILE *)-1;
+            // The inserted master is always client number 0
+            mem->index = 0;
+            if(reconnGetFreeClientIndex(&(mem->index)) == RECONN_SUCCESS)
+            {
+                mem->mode = INSERTEDMASTERMODE;
+#ifdef DEBUG_CONNECT
+                reconnDebugPrint("%s: insertedMasterSocketFd = %d\r\n", __FUNCTION__, insertedMasterSocketFd);
+                reconnDebugPrint("%s: Starting reconnClient index= %u \n", __FUNCTION__, mem->index);
+#endif
+                if(pthread_create(&reconnThreadIds[RECONN_NUM_SYS_TASKS], NULL, reconnClientTask, (CLIENTCONTEXT *)mem) < 0)
+                {
+                    reconnDebugPrint("%s: Could not start reconnClient, %d %s\n", __FUNCTION__, errno, strerror(errno));
+                }
+                else
+                {
+                    iphoneInserted = TRUE;
+                }
+            }
         }
-        iphoneInserted = TRUE;
+        else
+        {
+            reconnDebugPrint("%s: malloc failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+        }
     }
     else if(iphoneInserted == TRUE)
     {
         reconnDebugPrint("%s: Function Entered iphone EXTRACTED\n", __FUNCTION__);
 
-        memset( &theMessage, 0, INSERTED_MASTER_MSG_SIZE);
+        memset( &theMessage, 0, MASTER_MSG_SIZE);
         theMessage[0] = MASTER_EXTRACTED;
         printf("%s: masterClientMsgQid == %d\n", __FUNCTION__, masterClientMsgQid);
-        if(mq_send(masterClientMsgQid, (const char *)&theMessage, INSERTED_MASTER_MSG_SIZE, 0) != 0)
+        if(masterClientMsgQid != -1)
         {
-            reconnDebugPrint("%s: mq_send(masterClientMsgQid) failed. %d(%s)\n", __FUNCTION__, errno, strerror(errno));
-        }
-        else
-        {
-            reconnDebugPrint("%s: mq_send(masterClientMsgQid) success.\n", __FUNCTION__);
+            if(mq_send(masterClientMsgQid, (const char *)&theMessage, MASTER_MSG_SIZE, 0) != 0)
+            {
+                reconnDebugPrint("%s: mq_send(masterClientMsgQid) failed. %d(%s)\n", __FUNCTION__, errno, strerror(errno));
+            }
+            else
+            {
+                reconnDebugPrint("%s: mq_send(masterClientMsgQid) success.\n", __FUNCTION__);
+            }
         }
     }
 }
@@ -356,21 +507,14 @@ void reconnMasterIphone()
 
 int main(int argc, char **argv) 
 {
-#if 0
-    int in_socket_fd; /* Incoming socket file descriptor for socket 1068     */
-#endif
-    int intport = 0, i;
-    ReconnClientIndex index;
-    socklen_t client_len;
-    struct sockaddr_in server_addr, client_addr;
+    int i;
     struct stat statInfo;
     struct sigaction act;
-    struct ifreq ifr;
-    int optval = 1;
+    extern void *Usb0IpWatchTask(void *);
 
     UNUSED_PARAM(argc);
     UNUSED_PARAM(argv);
-    memset(&modeAndEqptDescriptors, 0, sizeof(ReconnModeAndEqptDescriptors));
+    memset(&gEqptDescriptors, 0, sizeof(ReconnEqptDescriptors));
 
 #ifndef __SIMULATION__
     initReconnCrashHandlers();
@@ -378,96 +522,48 @@ int main(int argc, char **argv)
     memset(&act, 0, sizeof(act));
     act.sa_flags = SA_SIGINFO;
     act.sa_sigaction = reconnCleanUp;
+    signal(SIGPIPE, SIG_IGN);
     sigaction(SIGTERM, &act, NULL);
-
-
-    // TODO remove this assignent when LNB is ready.
-    modeAndEqptDescriptors.lnbFd = -1;
 
     i = sizeof(reconnThreadIds);
     for(i = 0; i < RECONN_MAX_NUM_CLIENTS + RECONN_NUM_SYS_TASKS; i++)
     {
         reconnThreadIds[i] = -1;
     }
-
-#ifndef __SIMULATION__
-    //
-    // Need to register with libiphoned. This callback will signal when
-    // the iphone has been inserted into the reconn toolkit.
-    //
-    libiphoned_register_presence_change_callback(reconnMasterIphone);
-    libiphoned_register_rx_callback(insertedMasterRead);
-
-    //
-    // Now start libiphoned. This is a daemon which does all of the "heavy lifting" for the 
-    // front panel iPhone. The daemon does the reading, writing, insertion, and iPhone extraction.
-    //
-    reconnDebugPrint("%s: Calling libiphoned_start()\n", __FUNCTION__);
-    if(libiphoned_start() == -1)
-    {
-        reconnDebugPrint("%s: libiphoned_start() failed\n", __FUNCTION__);
-        exit(0);
-    }
-#endif
-    
-    /* Create the incoming (server) socket */
-    if((in_socket_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) 
-    {
-        reconnDebugPrint("%s: Server Failed to initialize the incoming socket %d(%s)\n", __FUNCTION__, errno, strerror(errno));
-        exit (0);
+    for(i = 0; i < (RECONN_MAX_NUM_CLIENTS); i++)
+    { 
+        activeClientsList[i] = 0;
     }
 
-    memset(&ifr, 9, sizeof(ifr));
-    snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "wlan0");
-#ifndef __SIMULATION__
-    if(setsockopt(in_socket_fd, SOL_SOCKET, SO_BINDTODEVICE, &ifr, sizeof(ifr)) < 0)
-    {
-        reconnDebugPrint("%s: setsockopt SO_BINDTODEVICE failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
-        exit(0);
-    }
-#endif
-    if(setsockopt(in_socket_fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0)
-    {
-        reconnDebugPrint("%s: setsockopt SO_REUSEADDR failed %d(%s)\n", __FUNCTION__, errno, strerror(errno));
-    }
 
-    bzero((unsigned char *) &server_addr, sizeof(server_addr));
-    /* bind the socket */
-    server_addr.sin_family = AF_INET;
-#ifndef __SIMULATION__
-    server_addr.sin_addr.s_addr = inet_addr("192.168.0.50");
-#else
-    server_addr.sin_addr.s_addr = INADDR_ANY;
-#endif
-    intport = RECONN_INCOMING_PORT;
-    server_addr.sin_port = htons(intport);
-
-    reconnDebugPrint("%s: binding to socket\n", __FUNCTION__);
-    if (bind(in_socket_fd, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0) 
-    {
-        reconnDebugPrint("reconnApp: Server Failed to bind the socket %d(%s)\n",  errno, strerror(errno));
-        exit (0);
-    }
-
-    // If there is an upgrade in progress then start a task that will sleep for 5 minutes then run.
-    // If the task does run, then the upgraded application has not crashed and so the new image 
-    // is OK.
+    // If there is an upgrade in progress then start a task that will sleep for 10 minutes then run.
+    // If the task wakes up, then the upgraded application has not crashed and so the new image 
+    // is probably OK.
     if(stat(UPGRADE_INPROGRESS_FILE_NAME, &statInfo) == 0)
     {
         if( pthread_create(&(reconnThreadIds[RECONN_UPGRADE_CHECK_TASK]), NULL, upgradeCheckTask, (void *)0) < 0)
         {
-            reconnDebugPrint("%s: Could not start reconnEqptTask %d %s\n", __FUNCTION__, errno, strerror(errno));
+            reconnDebugPrint("%s: Could not start upgradeCheckTask, %d %s\n", __FUNCTION__, errno, strerror(errno));
         }
+        unlink(UPGRADE_INPROGRESS_FILE_NAME);
     }
-    PeripheralInit(&modeAndEqptDescriptors);
-#ifdef DEBUG_CONNECT
-    reconnDebugPrint("%s: modeAndEqptDescriptors->GpsFd = %d\n", __FUNCTION__, modeAndEqptDescriptors.gpsFd);
-    reconnDebugPrint("      modeAndEqptDescriptors->PowerMeterFd = %d\n", modeAndEqptDescriptors.powerMeterFd);
-    reconnDebugPrint("      modeAndEqptDescriptors->LnbFd = %d\n", modeAndEqptDescriptors.lnbFd);
-    reconnDebugPrint("      modeAndEqptDescriptors->DmmFd = %d\n", modeAndEqptDescriptors.dmmFd);
-    reconnDebugPrint("      modeAndEqptDescriptors->AnalyzerFd = %d\n", modeAndEqptDescriptors.analyzerFd);
+
+    /*
+     * Initialize the AVCOM crc routine. The crc is used for spectrum analyzer upgrade and firmware 
+     * version intefaces.
+     */
+    crcInit();
+
+    PeripheralInit();
+//#ifdef DEBUG_CONNECT
+    reconnDebugPrint("      gEqptDescriptors->powerMeterFd = %d\n", gEqptDescriptors.powerMeterFd);
+    reconnDebugPrint("      gEqptDescriptors->dmmFd = %d\n", gEqptDescriptors.dmmFd);
+    reconnDebugPrint("      gEqptDescriptors->analyzerFd = %d\n", gEqptDescriptors.analyzerFd);
+//#endif
+#ifndef __SIMULATION__
+    //dmmDiags();
+    dmmLoadSavedConfig();
 #endif
-    dmmDiags();
     //
     // Startup debug menus
     //
@@ -476,6 +572,8 @@ int main(int argc, char **argv)
     registerSystemDebugMenu();
     registerDmmDebugMenu();
     registerSocketDebugMenu();
+    registerRemoteMonDebugMenu();
+    registerReconnMsgsMenu();
 
     if(pthread_create(&(reconnThreadIds[RECONN_MASTER_SOCKET_TASK]), NULL, insertedMasterTransmitTask, (void *)0) < 0)
     {
@@ -490,81 +588,76 @@ int main(int argc, char **argv)
     }
     else
     {
-        if(pthread_create(&(reconnThreadIds[RECONN_PWR_MGMT_TASK]), NULL, reconnPwrMgmtTask, (void *)0) < 0)
+        if(pthread_create(&(reconnThreadIds[RECONN_PWR_MGMT_TASK]), NULL, reconnPwrMgmtTask, (void  *)&gEqptDescriptors) < 0)
         {
             reconnDebugPrint("%s: Could not start reconnPwrMgmtTask, %d %s\n", __FUNCTION__, errno, strerror(errno));
         }
-#if 0
-        else if(pthread_create(&(reconnThreadIds[RECONN_PWR_BUTTON_TASK]), NULL, reconnPwrButtonTask, 
-                    (void *)0) < 0)
+        else if(pthread_create(&(reconnThreadIds[RECONN_EQPT_RSP_TASK]), NULL, reconnGetEqptResponseTask,(void *)&gEqptDescriptors) < 0)
         {
-            reconnDebugPrint("%s: Could not start reconnPwrMgmtTask, %d %s\n", __FUNCTION__, errno, strerror(errno));
+            reconnDebugPrint("%s: Could not start reconnGetEqptResponseTask, %d %s\n", __FUNCTION__, errno, strerror(errno));
         }
-#endif
         else if(pthread_create(&(reconnThreadIds[RECONN_BATTERY_MONITOR_TASK]), NULL, reconnBatteryMonTask, (void *) 0 ) < 0)
         {
             reconnDebugPrint("%s: Could not start reconnBatteryMonTask, %d %s\n", __FUNCTION__, errno, strerror(errno));
         }
         else if(pthread_create(&(reconnThreadIds[RECONN_DEBUG_MENU_TASK]), NULL, debugMenuTask, (void *) 0 ) < 0)
         {
-            reconnDebugPrint("%s: Could not start debugMenuTask,, %d %s\n", __FUNCTION__, errno, strerror(errno));
+            reconnDebugPrint("%s: Could not start debugMenuTask, %d %s\n", __FUNCTION__, errno, strerror(errno));
         }
-        else if(pthread_create(&(reconnThreadIds[RECONN_POWER_METER_TASK]), NULL, powerMeterPresenceTask, (void *) 0 ) < 0)
+        else if(pthread_create(&(reconnThreadIds[RECONN_POWER_METER_TASK]), NULL, powerMeterPresenceTask, (void *) &gEqptDescriptors) < 0)
         {
-            reconnDebugPrint("%s: Could not start debugMenuTask,, %d %s\n", __FUNCTION__, errno, strerror(errno));
+            reconnDebugPrint("%s: Could not start powerMeterPresenceTask, %d %s\n", __FUNCTION__, errno, strerror(errno));
         }
+//#ifndef __SIMULATION__
+        else if(pthread_create(&(reconnThreadIds[RECONN_DMM_SAVE_CONFIG_TASK]), NULL, dmmSaveConfigTask, (void *) 0 ) < 0)
+        {
+            reconnDebugPrint("%s: Could not start dmmSaveConfigTask, %d %s\n", __FUNCTION__, errno, strerror(errno));
+        }
+//#endif
         else
         {
-            /* Main While Loop */
-            while (TRUE) 
+#ifndef __SIMULATION__
+            //
+            // Need to register with libiphoned. This callback will signal when
+            // the iphone has been inserted into the reconn toolkit.
+            //
+            libiphoned_register_presence_change_callback(reconnMasterIphone);
+            libiphoned_register_rx_callback(insertedMasterRead, RECONN_RSP_PAYLOAD_SIZE);
+
+            //
+            // Now start libiphoned. This is a daemon which does all of the "heavy lifting" for the 
+            // front panel iPhone. The daemon does the reading, writing, insertion, and iPhone extraction.
+            //
+            reconnDebugPrint("%s: Calling libiphoned_start()\n", __FUNCTION__);
+            if(libiphoned_start() == -1)
             {
-                /* pend on the incoming socket */
-                if(listen(in_socket_fd, (RECONN_MAX_NUM_CLIENTS - 1)) == 0)
-                {
-
-                    client_len = sizeof(client_addr);
-
-                    /* sit here and wait for a new connection request */
-                    if((gNewSocketFd = accept(in_socket_fd, (struct sockaddr *) &client_addr,
-                                    &client_len)) < 0)
-                    {
-                        reconnDebugPrint("%s: Failed to open a new Client socket %d %s.\n", __FUNCTION__, errno , strerror(errno));
-                        /* place code here to recover from bad socket accept */
-                        continue;
-                        //exit (1);
-                    }
-                    if (gNewSocketFd != 0) 
-                    {
-                        if((index = reconnGetFreeClientIndex()) != -1)
-                        {
-                            modeAndEqptDescriptors.clientIndex = index;
-                            modeAndEqptDescriptors.clientMode = INITMODE;
-#ifdef DEBUG_CONNECT
-                            reconnDebugPrint("%s: gNewSocketFd = %d\r\n", __FUNCTION__, gNewSocketFd);
-                            reconnDebugPrint("%s: Starting reconnClient index= %u \n", __FUNCTION__, index);
-#endif
-                            if(pthread_create(&(reconnThreadIds[RECONN_NUM_SYS_TASKS + index]), NULL, reconnClientTask, 
-                                        (void *)&modeAndEqptDescriptors) < 0)
-                            {
-                                reconnDebugPrint("%s: Could not start reconnClient, %d %s\n", __FUNCTION__, errno, strerror(errno));
-                                continue;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        reconnDebugPrint("%s: gNewSocketFd =%d \n", __FUNCTION__, gNewSocketFd);
-                    }
-                }
-                else
-                {
-                    reconnDebugPrint("%s: listen returned  =%d(%s) \n", __FUNCTION__, errno, strerror(errno));
-                    //close(in_socket_fd);
-                    break;
-                }
+                reconnDebugPrint("%s: libiphoned_start() failed\n", __FUNCTION__);
+                exit(0);
             }
+
+            /*
+             * Now that the embedded software is up and running, stop the power LED from flashing.
+             */
+            if(reconnGpioAction(POWER_LED_GPIO, ENABLE, NULL) != RECONN_SUCCESS)
+            {
+                reconnDebugPrint("%s: reconnGpioAction(POWER_LED_GPIO, ENABLE, NULL) failed.\n", __FUNCTION__);
+            }
+#endif
+            wifiStartConnectionTask();
+#ifndef __SIMULATION__
+            if(pthread_create(&(reconnThreadIds[RECONN_IP_WATCH_TASK]), NULL, Usb0IpWatchTask, (void *)0) < 0)
+            
+            {
+                reconnDebugPrint("%s: Could not start Usb0IpWatchTask, %d %s\n", __FUNCTION__, errno, strerror(errno));
+            }
+#endif
         }
     }
+
+    /*
+     * See if we should start the task that accepts Wifi connections.
+     */ 
+    pthread_join(reconnThreadIds[RECONN_POWER_METER_TASK], NULL);
     reconnDebugPrint("%s: Exiting *******************\n",__FUNCTION__);
     exit (0);
 }

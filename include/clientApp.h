@@ -56,24 +56,91 @@
 //******************************************************************************
 #ifndef __CLIENTAPP_H
 #define __CLIENTAPP_H
+#include "wifi.h"
+#include <arpa/inet.h>
+#include <sys/stat.h>
+#include <mqueue.h>
 
 #define INSERTED_MASTER_MSG_Q_NAME  "/InsMstQ"  // Front panel inserted iPhone
 #define RECONNBEGIN "CFS RECONN 00.00 BEGIN"
+#define CLIENTSLEEPTIME 1000 //microseconds
+#ifndef __SIMULATION__
+#define CLIENTNODATATIME 4000000 //microseconds (4 seconds)
+#else
+#define CLIENTNODATATIME 4000000 //microseconds (4 seconds)
+#endif
+#define IPADDR_LEN 16
+#define MACADDR_LEN IPADDR_LEN
+#define HOSTNAME_LEN 255 
 
-#define INSERTED_MASTER_MSG_SIZE 4
+#define MASTER_MSG_SIZE 4
 typedef enum
 {
     MASTER_INSERTED,    // master client has been inserted into front panel
     MASTER_EXTRACTED,   // Instered master client has been removed from front panel
-    MASTER_ACK          // WiFi master client acknowledment message
+    MASTER_ACK,         // WiFi master client acknowledment message
+    LOW_BATTERY,        // Power Management 
+    METER_INSERTED,     // Power meter insertion event
+    METER_EXTRACTED,    // Power meter extraction event
+    RM_STATE_CHANGE,    // Remote Monitor connection state change
 }InsertedClientMessage;
 
-void * reconnClientTask(void *);
-int receive_packet_data(int, unsigned char *, int *);
-ReconnErrCodes formatReconnPacket(int, char *, int, ReconnPacket *);
-void reconnGetEqptResponse(int , int , int, ReconnMasterClientMode);
-void insertedMasterRead(unsigned char *, int);
+typedef struct { 
+    short   index;
+    short serialBytesRead; 
+    unsigned short cmdid; 
+    unsigned short responseId;
+    int     *thisContext;
+    int     noDataCount;
+    int     socketFd; 
+    int     tmpSocketFd; 
+    int     connectionOpen;
+    int     pktLength; 
+    int     length; 
+    int     responseNeeded; 
+    int     retStatus;
+    int     debugIndex; 
+    int     packetRetCode; 
+    int     flags; 
+    uint16_t portNum; 
+    ssize_t numBytes;
+#ifdef DEBUG_CLIENT 
+    int debugIndex; 
+    char *debugPtr; 
+#endif
+    char    *debugPtr; 
+    char IPAddr[IPADDR_LEN];
+    char SubnetMask[MACADDR_LEN];
+    char newSSID[WIFI_SSID_MAX_LENGTH + 1]; 
+    char newPasswd[WIFI_PASSWD_MAX_LENGTH + 1];
+    char theSerialNumberString[RECONN_SERIALNUM_MAX_LEN]; 
+    char theMessage[MASTER_MSG_SIZE];
+    char theWebServerHostName[HOSTNAME_LEN + 1];
+    FILE *tmpFd;
+    struct sockaddr_in sourceIp;
+    struct stat fileStat;
+    struct ifreq ifr;
+    ReconnPacket thePacket;
+    ReconnResponsePacket theResponsePkt;
+    ReconnResponsePacket *theResponsePktPtr;
+    ReconnErrCodes retCode;
+    ReconnEqptDescriptors *eqptDescriptors;
+    ReconnMasterClientMode mode;
+}CLIENTCONTEXT;
 
+extern CLIENTCONTEXT *activeClientsList[];
+extern mqd_t masterClientMsgQid;
+
+void * reconnClientTask(void *);
+ReconnErrCodes formatReconnPacket(int, char *, int, ReconnPacket *);
+void reconnGetEqptResponse(int , int , int, ReconnMasterClientMode); 
+void insertedMasterRead(unsigned char *, int); 
 extern void registerDebugCommand();
+extern pthread_mutex_t clientListMutex;
+extern int clientList(int);
+extern ReconnErrCodes getDeviceId(CLIENTCONTEXT *);
+#ifdef RECONN_TIMING
+extern int timeval_subtract (result, x, y);
+#endif
 
 #endif

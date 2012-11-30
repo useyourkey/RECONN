@@ -67,7 +67,7 @@
 #include "reconn.h"
 #include "upgrade.h"
 
-int main()
+int addReconnService( char *fileName, char *sumFileName)
 {
     UPGRADEBUNDLE bundle;
     short headerLength;
@@ -85,13 +85,14 @@ int main()
     strcat(&(bundle.headerVersion[0]), majorLevel);
     strcat(&(bundle.headerVersion[2]), minorLevel);
     strcat(&(bundle.headerVersion[4]), patchLevel);
-    if((filePtr = fopen("reconnSum", "r")))
+    if((filePtr = fopen(sumFileName, "r")))
     {
         if(fread(&(bundle.payloadChecksum[0]), 1, MD5SUM_SIZE, filePtr) > 0)
         {
             fclose(filePtr);
             memset(&fileStat, 0, sizeof(fileStat));
-            if(stat("reconn-service.gz", &fileStat) == 0)
+            //if(stat("reconn-service.gz", &fileStat) == 0)
+            if(stat(fileName, &fileStat) == 0)
             {
                 sprintf(&(bundle.payloadLength[0]), "%d", (unsigned int)fileStat.st_size);
                 if((filePtr = fopen("headerData", "w")))
@@ -100,6 +101,8 @@ int main()
                     fwrite(bundle.headerLength, 1, HEADER_LENGTH_SIZE, filePtr);
                     fwrite(bundle.payloadLength, 1, PAYLOAD_LENGTH_SIZE, filePtr);
                     fwrite(bundle.payloadChecksum, 1, MD5SUM_SIZE, filePtr);
+                    strcpy((char *)&(bundle.fileName), fileName);
+                    fwrite(bundle.fileName, 1, FILENAME_SIZE, filePtr);
                     fclose(filePtr);
                     system("md5sum headerData > headerSum");
                     if((filePtr = fopen("headerSum", "r")))
@@ -107,16 +110,18 @@ int main()
                         if(fread(&(bundle.headerChecksum[0]), 1, MD5SUM_SIZE, filePtr) > 0)
                         {
                             fclose(filePtr);
-                            if((bundleFilePtr = fopen("reconnBundle", "w")))
+                            if((bundleFilePtr = fopen("reconnBundle", "a")))
                             {
                                 fwrite(bundle.headerVersion, 1, HEADER_VERSION_SIZE, bundleFilePtr);
                                 fwrite(bundle.headerLength, 1, HEADER_LENGTH_SIZE, bundleFilePtr);
                                 fwrite(bundle.headerChecksum, 1, MD5SUM_SIZE, bundleFilePtr);
                                 fwrite(bundle.payloadLength, 1, PAYLOAD_LENGTH_SIZE, bundleFilePtr);
                                 fwrite(bundle.payloadChecksum, 1, MD5SUM_SIZE, bundleFilePtr);
+                                fwrite(bundle.fileName, 1, FILENAME_SIZE, bundleFilePtr);
                                 // Now cat the reconn-service.gz to the bundle
                                 //system("cat reconn-service.gz >> reconnBundle");
-                                if((filePtr = fopen("reconn-service.gz", "r")))
+                                //if((filePtr = fopen("reconn-service.gz", "r")))
+                                if((filePtr = fopen(fileName, "r")))
                                 {
                                     while(fread(buff, 1, 1, filePtr) > 0)
                                     {
@@ -159,24 +164,107 @@ int main()
             }
             else
             {
-                printf("%s: stat() failed %d(%s)\n", __FILE__, errno, strerror(errno));
+                printf("%s: stat(%s) failed %d(%s)\n", __FILE__, fileName, errno, strerror(errno));
             }
         }
         else
         {
-            printf("%s: Could not reconnSum file %d(%s)\n", __FILE__, errno, strerror(errno));
+            printf("%s: Could not read checksum from %s fread() %d(%s)\n", __FILE__, sumFileName, errno, strerror(errno));
             fclose(filePtr);
         }
     }
     else
     {
-        printf("%s: Could not open reconnSum for reading %d(%s)\n", __FILE__, errno, strerror(errno));
+        printf("%s: Could not open %s for reading %d(%s)\n", __FILE__, sumFileName, errno, strerror(errno));
     }
     // Now transfer the file into the bundle
-    unlink("reconnSum");
+    unlink(sumFileName);
     unlink("headerSum");
     unlink("headerData");
     return 0;
 }
 
+void printUsage()
+{
+    printf("usage:  createBundle file1 file2 ....\n\tWhere file1, file2 .... are files to be added to the reconnBundle.\n\tAll files must be in the same directory as createBundle.\n");
+}
+
+int main(int argc, char *argv[])
+{
+    int i;
+    char md5sumName[100];
+    char gzipName[100];
+    char command[100];
+    struct stat fileStat;
+
+    if(argc == 1)
+    {
+        printUsage();
+    }
+    else
+    {
+        for(i = 1; i < argc; i++)
+        {
+            memset(md5sumName, 0, 100);
+            memset(command, 0, 100);
+            memset(gzipName, 0, 100);
+            /*
+             * make sure the file exists
+             */
+            if(stat(argv[i], &fileStat) != 0)
+            {
+                printf("\n***** %s not found\n", argv[i]);
+                printUsage();
+                continue;
+            }
+            /*
+             * create an md5sum
+             */
+            strcat(md5sumName, argv[i]);
+            strcat(md5sumName, "Sum");
+            strcat(command, "md5sum ");
+            strcat(command, argv[i]);
+            strcat(command, " >  ");
+            strcat(command, md5sumName);
+            if(system(command) != 0)
+            {
+                printf("%s failed\n", command);
+                continue;
+            }
+            /*
+             * gzip the file
+             */
+            memset(command, 0, 100);
+            strcat(command, "gzip ");
+            strcat(command, argv[i]);
+            if(system(command) != 0)
+            {
+                printf("%s failed\n", command);
+                continue;
+            }
+            strcat(gzipName, argv[i]);
+            strcat(gzipName, ".gz");
+
+            addReconnService(gzipName, md5sumName);
+
+            /*
+             * gunzip the file
+             */
+            memset(command, 0, 100);
+            strcat(command, "gunzip ");
+            strcat(command, gzipName);
+            if(system(command) != 0)
+            {
+                printf("%s failed\n", command);
+                continue;
+            }
+
+            /*
+             * remove the md5sum file
+             */
+            unlink(md5sumName);
+        }
+    }
+    return 0;
+}
 

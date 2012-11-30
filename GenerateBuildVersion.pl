@@ -67,9 +67,6 @@ print OUTPUT "#include \"version.h\"\n";
 
 $BuildTime = localtime(time);
 
-print OUTPUT "static char gReconnVersionMajor[] = majorLevel;\n";
-print OUTPUT "static char gReconnVersionMinor[] = minorLevel;\n";
-print OUTPUT "static char gReconnVersionPatch[] = patchLevel;\n";
 print OUTPUT "static char gReconnSwVersionString[RECONN_STRING_MAX];\n";
 print OUTPUT "static char gReconnVersionBuildDate[] = \"$BuildTime\";\n";
 print OUTPUT "static char gKernelVersionString[KERNEL_STRING_MAX];\n\n\n\n";

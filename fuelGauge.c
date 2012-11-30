@@ -70,6 +70,7 @@
 
 #include "fuel_gauge.h"
 #include "reconn_i2c.h"
+#include "debugMenu.h"
 
 static fuel_gauge_status_t fuel_gauge_init_context(fuel_gauge_handle_t h);
 
@@ -97,7 +98,7 @@ fuel_gauge_status_t fuel_gauge_init(fuel_gauge_handle_t *ph)
     memset(h, 0, sizeof(fuel_gauge_context_t));
 
     // initialize the fuel gauge os objects
-    sem_init(&h->ctx_mutext, 0, 1);
+    sem_init(&(h->ctx_mutext), 0, 1);
 
     // initialize the context items
     status = fuel_gauge_init_context(h);
@@ -128,11 +129,14 @@ fuel_gauge_status_t fuel_gauge_uninit(fuel_gauge_handle_t h)
         return status;
     }
 
-    // destroy the os objects
-    sem_destroy(&h->ctx_mutext);
-
+    reconnDebugPrint("%s: freeing the context\n", __FUNCTION__);
     // free the fuel gauge context
     free(h);
+
+    reconnDebugPrint("%s: destroying fuel gauge semaphore\n", __FUNCTION__);
+    // destroy the os objects
+    sem_destroy(&(h->ctx_mutext));
+
 
     return FUEL_GAUGE_STATUS_SUCCESS;
 }
@@ -329,7 +333,10 @@ fuel_gauge_status_t fuel_gauge_get_battery_voltage(fuel_gauge_handle_t h,
     ret = reconn_i2c_read_reg(h->fh, FUEL_GAUGE_REG_VCELL, (uint8_t *) &val, sizeof(uint16_t));
     if (ret == sizeof(uint16_t))
     {
-        // UNITS: 1.25v for MAX17040, 2.50v for MAX17041
+        /*
+         * Flip the byte order and remove the LSB nibble. The LSB nibble is always 0 and is not
+         * used by the MAXIM fuel gauge.
+         */
         *pvoltage = FUEL_GAUGE_NTOHS(val) >> 4;
     }
     else

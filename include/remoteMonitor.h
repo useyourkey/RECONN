@@ -1,11 +1,11 @@
 //******************************************************************************
 //******************************************************************************
 //
-// FILE:        upgrade.h
+// FILE:        remoteMonitor.h
 //
 // CLASSES:     
 //
-// DESCRIPTION: Header file for the Reconn Upgrade Applications
+// DESCRIPTION: Header file for the Reconn Remote Monitor 
 //         
 //******************************************************************************
 //
@@ -53,39 +53,48 @@
 // 
 //******************************************************************************
 //******************************************************************************
-#ifndef __UPGRADE_H
-#define __UPGRADE_H
+#ifndef __REMOTE_H
+#define __REMOTE_H
 
-#define HEADER_VERSION_SIZE 8
-#define HEADER_LENGTH_SIZE 2
-#define VERSION_STRING_SIZE 10
-#define PAYLOAD_LENGTH_SIZE 8
-#define VERSIONS 3
-#define MD5SUM_SIZE 32
-#define FILENAME_SIZE 50
-#define COMMAND_SIZE 50
-#define UPGRADE_BUNDLE_NAME "/tmp/reconnBundle"
-#define UPGRADE_HEADER_SUM_NAME "/tmp/headerSum"
-#define UPGRADE_HEADER_DATA_NAME "/tmp/headerData"
-#define UPGRADE_GZIP_NAME "/tmp/reconn-service.gz"
-#define UPGRADE_RECONN_NAME "/tmp/reconn-service"
-#define UPGRADE_SCRIPT_NAME "/tmp/upgradeScript.sh"
-#define UPGRADE_FW_NAME "/tmp/analyzerBinary"
-#define UPGRADE_TASK_SLEEP_TIME 300 // 5 minutes
+#define REMOTE_MONITOR_PORT 1068
+#define REMOTE_MONITOR_MAX_CLIENTS 1
+#define REMOTE_MONITOR_KEEPALIVE_TIME 15 // seconds
 
+typedef enum{
+    RM_SEND_DATA = 1,
+    RM_STOP_DATA
+}REMOTE_MONITOR_DATA_STATES;
 
-#define UPGRADE_INPROGRESS_FILE_NAME "/tmp/upgrade_inprogress"
+typedef enum{
+    CONNECTED = 1,
+    DISCONNECTED 
+}REMOTE_MONITOR_CONNECTION_STATES;
+
+typedef enum
+{
+    RM_INIT,
+    RM_GET_HANDSHAKE,
+    RM_SEND_CLIENT_ACCESS,
+    RM_WAIT_RESP,
+    RM_DEVICE_ID,
+    RM_RCV_DATA
+}REMOTE_MONITOR_STATES;
 
 typedef struct
 {
-    char headerVersion[HEADER_VERSION_SIZE];
-    char headerLength[HEADER_LENGTH_SIZE];
-    char headerChecksum[MD5SUM_SIZE];
-    char payloadLength[PAYLOAD_LENGTH_SIZE];
-    char payloadChecksum[MD5SUM_SIZE];
-    char fileName[FILENAME_SIZE];
-}UPGRADEBUNDLE;
+    int webServerSocket;
+    //char IPAddress[RECONN_IPADDR_LEN + 1]; // account for null terminator
+    //int port;
+    int remoteMonitorDone;
+    YESNO remoteMonitorActive;
+    CLIENTCONTEXT *theContextPtr;
+    REMOTE_MONITOR_STATES theState;
+}REMOTE_MONITOR_DEBUG_DATA;
 
-extern ReconnErrCodes extractBundle();
-
-#endif /* __UPGRADE_H */
+extern int stopRemoteMonitorHb;
+extern void *remoteMonitorTask(void *args);
+extern void remoteMonitorCleanup();
+extern ReconnErrCodes remoteMonitorActivate(YESNO, CLIENTCONTEXT *);
+extern YESNO getRemoteMonitorState();
+extern void remoteMonitorGetDebugValues(REMOTE_MONITOR_DEBUG_DATA *);
+#endif /* __REMOTE_H */

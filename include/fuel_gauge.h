@@ -71,17 +71,31 @@
 /**
  * host to network support
  */
+
 #ifdef __BIG_ENDIAN__
 #define FUEL_GAUGE_HTONL
 #define FUEL_GAUGE_HTONS
 #define FUEL_GAUGE_NTOHL
 #define FUEL_GAUGE_NTOHS
-#else // #ifdef __BIG_ENDIAN__
+#else
 #define FUEL_GAUGE_HTONL htobe32
 #define FUEL_GAUGE_HTONS htobe16
 #define FUEL_GAUGE_NTOHL be32toh
 #define FUEL_GAUGE_NTOHS be16toh
-#endif // #ifdef __BIG_ENDIAN__
+#endif 
+#define FUEL_GAUGE_MAX_PERCENTAGE 85 // fuel gauge reading 85% or better is fuel battery charge
+
+#define FUEL_GAUGE_DEVICE_I2C_BUS 3
+#define FUEL_GAUGE_RETRY_COUNT 5
+#define FUEL_MODEL_SIZE 50
+
+typedef enum
+{
+    CHARGE_ENABLED  = '0',
+    CHARGE_DISABLED = '1',
+    CHARGE_NO_STATE = '3'
+}FUEL_GAUGE_ENUM;
+
 
 /**
  * Implementation status codes
@@ -343,5 +357,6 @@ fuel_gauge_status_t fuel_gauge_set_rcomp(fuel_gauge_handle_t h,
  */
 fuel_gauge_status_t fuel_gauge_power_on_reset(fuel_gauge_handle_t h);
 
-#endif // #ifndef __FUEL_GAUGE_H_
 
+extern void fuelModelCleanUp();
+#endif // #ifndef __FUEL_GAUGE_H_

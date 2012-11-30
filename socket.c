@@ -66,12 +66,11 @@
 #include "debugMenu.h"
 
 extern short socketPrint;
+extern short clientToPrint;
+extern int socketIdList[];
 
 int numberOfOpenSocket = 0;
-#ifdef SOCKET_MUTEX
 pthread_mutex_t socketMutex = PTHREAD_MUTEX_INITIALIZER;
-#endif
-int socketIdList[RECONN_MAX_NUM_CLIENTS];
 extern int libiphoned_tx(unsigned char *, unsigned int);
 
 
@@ -80,7 +79,8 @@ void sendSocket(int socket_fd, unsigned char * buffer_s, int length, int num)
     int errCode;
     int i;
 
-    if(socketPrint == TRUE)
+    if((socketPrint == TRUE) && 
+            ((clientToPrint == -1) || (socket_fd == socketIdList[clientToPrint])))
     {
         reconnDebugPrint("%s(%d): ", __FUNCTION__, socket_fd);
         for (i = 0; i < length; ++i) 

@@ -1,11 +1,11 @@
 //******************************************************************************
 //******************************************************************************
 //
-// FILE:        upgrade.h
+// FILE:        network.h
 //
 // CLASSES:     
 //
-// DESCRIPTION: Header file for the Reconn Upgrade Applications
+// DESCRIPTION: Header file for the Reconn Network layer
 //         
 //******************************************************************************
 //
@@ -53,39 +53,22 @@
 // 
 //******************************************************************************
 //******************************************************************************
-#ifndef __UPGRADE_H
-#define __UPGRADE_H
-
-#define HEADER_VERSION_SIZE 8
-#define HEADER_LENGTH_SIZE 2
-#define VERSION_STRING_SIZE 10
-#define PAYLOAD_LENGTH_SIZE 8
-#define VERSIONS 3
-#define MD5SUM_SIZE 32
-#define FILENAME_SIZE 50
-#define COMMAND_SIZE 50
-#define UPGRADE_BUNDLE_NAME "/tmp/reconnBundle"
-#define UPGRADE_HEADER_SUM_NAME "/tmp/headerSum"
-#define UPGRADE_HEADER_DATA_NAME "/tmp/headerData"
-#define UPGRADE_GZIP_NAME "/tmp/reconn-service.gz"
-#define UPGRADE_RECONN_NAME "/tmp/reconn-service"
-#define UPGRADE_SCRIPT_NAME "/tmp/upgradeScript.sh"
-#define UPGRADE_FW_NAME "/tmp/analyzerBinary"
-#define UPGRADE_TASK_SLEEP_TIME 300 // 5 minutes
+#ifndef __NETWORK_H
+#define __NETWORK_H
 
 
-#define UPGRADE_INPROGRESS_FILE_NAME "/tmp/upgrade_inprogress"
 
-typedef struct
+#define IPWATCHSLEEPTIME 5000000 // micro seconds
+#ifndef __SIMULATION__
+#define USB_CARRIER_FILENAME "/sys/class/net/usb0/carrier"
+#else
+#define USB_CARRIER_FILENAME "carrier"
+#endif
+
+typedef enum
 {
-    char headerVersion[HEADER_VERSION_SIZE];
-    char headerLength[HEADER_LENGTH_SIZE];
-    char headerChecksum[MD5SUM_SIZE];
-    char payloadLength[PAYLOAD_LENGTH_SIZE];
-    char payloadChecksum[MD5SUM_SIZE];
-    char fileName[FILENAME_SIZE];
-}UPGRADEBUNDLE;
-
-extern ReconnErrCodes extractBundle();
-
-#endif /* __UPGRADE_H */
+    LINK_DOWN,
+    LINK_UP,
+    IP_CHANGE
+}LINKSTATUS_e;
+#endif

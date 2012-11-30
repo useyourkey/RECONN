@@ -56,17 +56,25 @@
 #ifndef __POWERMGMT_H
 #define __POWERMGMT_H
 
+#ifndef __SIMULATION__
 #define RECONN_POWER_BUTTON_GPIO_FILENAME "/sys/class/gpio/gpio162/value"
+#else
+#define RECONN_POWER_BUTTON_GPIO_FILENAME "powerButtonSim"
+#endif
+
 #define RECONN_POWER_DOWN_TIME 40 // 40 minutes
 #define RECONN_POWER_CONSERVATION_TIME 20 // minutes
-#define RECONN_CHECK_POWER_SWITCH 2000 // microseconds (200 milliseconds)
+
+#ifndef __SIMULATION__
+#define RECONN_CHECK_POWER_SWITCH 200000 // microseconds (200 milliseconds)
+#else
+#define RECONN_CHECK_POWER_SWITCH 200000 
+#endif
 #define RECONN_BATTERY_MONITOR_SLEEP 1000000 // microseconds (1 second)
 
 #define RECONN_DC_POWER_GPIO_FILENAME "/sys/class/gpio/gpio137/value"
 #define RECONN_CHARGE_THERMISTOR_GPIO_FILENAME "/sys/class/gpio/gpio158/value"
 
-#define RECONN_FUEL_GAUGE_DEVICE_I2C_BUS 3
-#define FUEL_GAUGE_RETRY_COUNT 5
 #define NOT_ATTACHED '0'
 #define ATTACHED '1'
 #define TEMP_OUT_OF_RANGE '0'
@@ -104,6 +112,7 @@ typedef struct
     int ReconnSystemCounter;
 }PowerMgmtEqptCounters;
 
+extern YESNO gSimulateLowBattery;
 extern void *reconnPwrMgmtTask(void *);
 extern void *reconnPwrButtonTask(void *);
 extern void resetPowerStandbyCounter(PowerMgmtEqptType);

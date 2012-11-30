@@ -65,9 +65,12 @@
 #define INVALID_COMMAND "Invalid SA Command\r\n\0"
 
 
-ReconnErrCodes SpectrumAnalyzerInit(int *);
-ReconnErrCodes SpectrumAnalyzerWrite(unsigned char *buffer, int length);
-ReconnErrCodes SpectrumAnalyzerRead(unsigned char *buffer, int *length);
-ReconnErrCodes SpectrumAnalyzerClose(void);
-ReconnErrCodes makeSpectrumAnalyzerOutput(unsigned char *sa_outputbuffer, int *sa_outputlength);
+extern ReconnErrCodes SpectrumAnalyzerInit(int *);
+extern ReconnErrCodes SpectrumAnalyzerWrite(unsigned char *, int );
+extern ReconnErrCodes SpectrumAnalyzerRead(unsigned char *, int *);
+extern ReconnErrCodes SpectrumAnalyzerClose(int *);
+extern ReconnErrCodes makeSpectrumAnalyzerOutput(unsigned char *, int *);
+extern ReconnErrCodes SpectrumAnalyzerSelectRead(unsigned char *, int *, struct timeval *);
+extern ReconnErrCodes SpectrumAnalyzerUpgrade();
 #endif /* __SPECTRUM_H */
+

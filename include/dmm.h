@@ -56,6 +56,7 @@
 #ifndef __DMM_H
 #define __DMM_H
 
+#include <semaphore.h>
 #ifdef __SIMULATION__
 #define DMM_SERIAL_PORT         "/dev/ttyS0"
 #else
@@ -66,13 +67,49 @@
 #define DMM_STOPBITS            0
 #define DMM_PARITYON            0
 #define DMM_PARITY              0
-#define DMM_MAX_RESPONSE        5
+#define DMM_MAX_RESPONSE        6
+#define DMM_WAIT_TIME           150000
 #define DMM_MAX_SHUTDOWN        "t9999\n"
-#define DMM_SHUTDOWN_RESP       "9999t"
+#define DMM_SHUTDOWN_RESP       "9999t "
+#define DMM_SOCKET_PORT         1071
+#define DMM_STATUS_RSP_LEN      5
+#define DMM_CONFIG_FILE_NAME    "/home/reconn/DMMConfig"
+#define DMM_NUM_CONFIG_BYTES    2
 
-ReconnErrCodes dmmInit(int *);
-ReconnErrCodes dmmWrite(unsigned char *buffer, int length);
-ReconnErrCodes dmmRead(unsigned char *buffer, int *length);
-ReconnErrCodes makeDmmOutput(unsigned char *gps_outputbuffer, int *gps_outputlength);
-ReconnErrCodes dmmDiags(void);
+typedef enum
+{
+    STATUS_COMMAND,
+    MILLI_VOLT_COMMAND,
+    VOLT_COMMAND,
+    MILLI_AMP_COMMAND,
+    AMP_COMMAND,
+    OHM_COMMAND,
+    DC_MODE_COMMAND,
+    AC_MODE_COMMAND,
+}DMM_COMMAND;
+
+typedef enum
+{
+    SAVE_DMM_STATE,
+    DMM_SAVE_COMPLETE
+}DMM_POWER_BUTTON_ENUMS;
+
+typedef struct
+{
+    DMM_POWER_BUTTON_ENUMS theMessage;
+}DMM_POWER_BUTTON_MSG;
+
+extern ReconnErrCodes dmmInit(int *);
+extern ReconnErrCodes dmmWrite(unsigned char *buffer, int length);
+extern ReconnErrCodes dmmRead(unsigned char *buffer, int *length);
+extern ReconnErrCodes makeDmmOutput(unsigned char *gps_outputbuffer, int *gps_outputlength);
+extern ReconnErrCodes dmmDiags(void);
+extern ReconnErrCodes dmmPowerDown();
+extern void *dmmSaveConfigTask(void * args);
+extern void dmmLoadSavedConfig();
+extern void dmmSaveConfig();
+extern pthread_mutex_t dmmMutex;
+extern char *dmmCommands[];
+extern int gDmmDebugLevel;
+
 #endif /* __DMM_H */

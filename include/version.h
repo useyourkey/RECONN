@@ -56,9 +56,9 @@
 #ifndef __VERSION_H
 #define __VERSION_H
 
-#define majorLevel "00"
-#define minorLevel "07"
-#define patchLevel "00"
+#define majorLevel "01"
+#define minorLevel "01"
+#define patchLevel "03"
 
 #define RECONN_STRING_MAX 25
 #define KERNEL_STRING_MAX 50

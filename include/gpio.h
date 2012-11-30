@@ -12,7 +12,7 @@ typedef enum
     GPIO_144,   // LNB 10MHZ
     GPIO_145,   // Charging Disable
     GPIO_146,   // Spectrum Analyzer 10MHZ
-    GPIO_147,   // Enable 3.3V GPS power
+    GPIO_147,   // LNB 18V
     GPIO_156,   // Enable 5V Power
     GPIO_157,   // Enable 12V power
     GPIO_158,   // Battery Thermo status
@@ -55,6 +55,9 @@ typedef enum
     ENABLE,
     READ
 }GpioAction;
+
+#define GPIO_IS_INACTIVE '0'
+#define GPIO_IS_ACTIVE '1'
 
 extern ReconnErrCodes reconnGpioAction(GpioNames, GpioAction, short *);
 #endif

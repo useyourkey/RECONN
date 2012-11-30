@@ -65,12 +65,12 @@
 #include <errno.h>
 #include <ucontext.h>
 #include "reconn.h"
+#include "debugMenu.h"
+#include "libiphoned.h"
 
 //#define TRACE_START 3 // NPTL
 #define TRACE_START 0  // LinuxThreads
 #define TRACE_MAX   50
-
-#define LOG_FS_DIR  "/usr/bin"
 
 // Debug variable which disables card reset after crash when set.
 int gDisableCrashReset = FALSE;
@@ -117,7 +117,7 @@ void initReconnCrashHandlers(void)
     sigaction(SIGSYS,  &act, NULL);
     sigaction(SIGXCPU, &act, NULL);
     sigaction(SIGXFSZ, &act, NULL);
-    sigaction(SIGPIPE, &act, NULL);
+    //sigaction(SIGPIPE, &act, NULL);
     sigaction(SIGSTKFLT, &act, NULL);
 
     // Catch the Abort signal.
@@ -137,12 +137,6 @@ void initReconnCrashHandlers(void)
     sigaction(SIGPROF, &act, NULL);
     sigaction(SIGPWR, &act, NULL);
     sigaction(SIGVTALRM, &act, NULL);
-
-    /*
-     * Keep the default actions for the following signals:             
-     * SIGTERM - Used by ISS to reload the application.
-     * SIGHUP  - Used by GDB, but dev jumper is not available on the CPE.
-     */
 
     // Set default handler for realtime signals.
     for (signo = SIGRTMIN; signo <= SIGRTMAX; signo++)
@@ -230,10 +224,10 @@ void crashHandler(int signo, siginfo_t *sigInfo, void *ptr)
         for (j = 0; j < num_frames; j++)
         {
             crashPrint(lfp, strings[j]);
+            crashPrint(lfp, "\n");
         }
         free(strings);
     }
-
 
     // Replace the signal entry point with the crash address.
     tracebuf[TRACE_START] = (void *)uc->uc_mcontext.arm_ip;
@@ -248,13 +242,12 @@ void crashHandler(int signo, siginfo_t *sigInfo, void *ptr)
     }
 
     // Allow time for the crash dump to be output to the serial port.
-    sleep(10);
+    //sleep(5);
 
     if(signo != SIGPIPE)
     {
-        // Save the time for the next bootup.
-        system("killall iphoned");
-        system("killall reconn-service");
+        libiphoned_stop();
+        system("killall -SIGTERM reconn-service");
     }
 }
 
@@ -269,6 +262,9 @@ void abortHandler(int signo, siginfo_t *sigInfo, void *ptr)
     int num_frames;
     void *tracebuf[TRACE_MAX];
 
+    UNUSED_PARAM(signo);
+    UNUSED_PARAM(sigInfo);
+    UNUSED_PARAM(ptr);
     crashPrint(NULL, "\n\nabort() called (SIGABRT)\n\n");
 
     num_frames = backtrace(tracebuf, TRACE_MAX);
@@ -277,8 +273,8 @@ void abortHandler(int signo, siginfo_t *sigInfo, void *ptr)
     fflush(stdout);
     sleep(10);
     // Save the time for the next bootup.
-    system("killall iphoned");
-    system("killall reconn-service");
+    libiphoned_stop();
+    system("killall -SITERM reconn-service");
 }
 
 /*
@@ -294,6 +290,7 @@ void defaultSignalHandler(int signo, siginfo_t *sigInfo, void *ptr)
 
     crashPrint(NULL, "\n\n\n!!! Unexpected Signal !!!\n");
 
+    UNUSED_PARAM(ptr);
     memset(sigdesc, 0, 100);
     memset(outbuf, 0, 120);
     sprintf(sigdesc, "%.60s (signal #%d)\n", strsignal(signo), signo);
@@ -316,8 +313,8 @@ void defaultSignalHandler(int signo, siginfo_t *sigInfo, void *ptr)
         fclose(lfp);
     sleep(10);
     // Save the time for the next bootup.
-    system("killall iphoned");
-    system("killall reconn-service");
+    libiphoned_stop();
+    system("killall -SIGTERM reconn-service");
 }
 
 
@@ -431,7 +428,7 @@ FILE *crashCreateLogFile(char *outbuf)
 {
     FILE *lfp;
 
-    lfp = fopen(LOG_FS_DIR"/crashlog.txt", "w");
+    lfp = fopen(RECONN_CRASHLOG_FILE_NAME, "w");
     if (lfp != NULL)
     {
         // Write the build info header.
@@ -440,7 +437,7 @@ FILE *crashCreateLogFile(char *outbuf)
     }
     else
     {
-        reconnDebugPrint("%s: fopen(%s/crashlog.txt, w) failed %d (%s)\n", __FUNCTION__, LOG_FS_DIR, errno, strerror(errno));
+        reconnDebugPrint("%s: fopen(%s, w) failed %d (%s)\n", __FUNCTION__, RECONN_CRASHLOG_FILE_NAME, errno, strerror(errno));
     }
 
     return lfp;
